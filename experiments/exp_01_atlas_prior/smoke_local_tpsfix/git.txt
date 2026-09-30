@@ -1,0 +1,7 @@
+commit: 5f31ef52a5bd37ac62d40612079f5aca6254a677
+uncommitted changes:
+M atlas/landmarks.py
+ M atlas/tps.py
+ M experiments/registration_log.md
+ M tests/test_tps.py
+?? prototype.ipynb

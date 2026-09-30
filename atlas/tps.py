@@ -21,6 +21,20 @@ correspondences get partially absorbed into the smooth affine+low-frequency
 part of the field instead of forcing a sharp local bend. This matters here
 because atlas-to-target correspondences from intensity-patch matching WILL
 contain some bad matches even after RANSAC.
+
+Sign of the regularisation term: with phi(r) = r the kernel matrix K is
+conditionally NEGATIVE definite (distance matrices are of negative type), so
+the smoothing system is (K - lambda*I), not (K + lambda*I). Minimising
+sum |f(x_i) - v_i|^2 + lambda * bending_energy, with bending energy
+-w'Kw >= 0, gives M[(K - lambda*I) w + P c - v] = 0. The opposite sign is
+near-singular whenever lambda matches an eigenvalue of -K, which produced
+erratic fits (residuals of 100-4000 mm, weights in the hundreds, 40-55 % of
+control points folding) in an earlier version of this file. With the correct
+sign the fit moves smoothly and monotonically from exact interpolation
+(lambda = 0) to the plain affine least-squares fit (lambda -> infinity).
+
+lambda is in units of mm of kernel distance, so useful values are large
+(tens to thousands for control points spread over ~100s of mm), not O(1).
 """
 from __future__ import annotations
 
@@ -40,8 +54,8 @@ class ThinPlateSpline:
 
         source_points, target_points: (N, 3), N >= 4 (need at least 4 non-
         coplanar points to fix the affine part in 3D).
-        regularization: smoothing parameter (mm-ish scale of allowed
-        deviation at the control points); 0.0 = exact interpolation.
+        regularization: smoothing weight lambda (see module docstring for its
+        scale); 0.0 = exact interpolation, large = the affine least-squares fit.
         """
         source_points = np.asarray(source_points, dtype=np.float64)
         target_points = np.asarray(target_points, dtype=np.float64)
@@ -55,7 +69,7 @@ class ThinPlateSpline:
 
         K = _pairwise_distances(source_points, source_points)  # phi(r) = r
         if regularization > 0:
-            K = K + regularization * np.eye(n)
+            K = K - regularization * np.eye(n)  # minus: K is conditionally negative definite, see module docstring
 
         P = np.concatenate([np.ones((n, 1)), source_points], axis=1)  # (N, 4): [1, x, y, z]
 

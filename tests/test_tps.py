@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from atlas.tps import ThinPlateSpline
 
@@ -64,6 +65,36 @@ def test_regularization_produces_smoothing_not_exact_interpolation():
 
     assert exact_residual < 1e-6
     assert smooth_residual > 1.0  # smoothing spline does not chase the outlier
+
+
+def test_smoothing_moves_monotonically_from_interpolation_to_affine_fit():
+    """
+    Regression test for a sign error (K + lambda*I instead of K - lambda*I) that
+    made the fit erratic: residuals jumped to 100-1500 mm at moderate lambda and
+    weights grew to the hundreds. A correct smoothing spline has control-point
+    residuals that rise monotonically from 0 (lambda=0) towards the plain affine
+    least-squares residual (lambda -> infinity), and never blow up.
+    """
+    rng = np.random.default_rng(0)
+    src = rng.uniform(-100, 100, (200, 3))
+    A = np.eye(3) + 0.05 * rng.standard_normal((3, 3))
+    dst = src @ A + [5, -3, 2] + 8 * rng.standard_normal((200, 3)) + 15 * np.sin(src / 25)
+
+    X = np.c_[src, np.ones(200)]
+    affine_residual = np.linalg.norm(X @ np.linalg.lstsq(X, dst, rcond=None)[0] - dst, axis=1).mean()
+
+    residuals, max_weights = [], []
+    lambdas = [0.0, 5.0, 20.0, 50.0, 320.0, 1280.0, 5120.0, 1e5]
+    for lam in lambdas:
+        tps = ThinPlateSpline(src, dst, regularization=lam)
+        residuals.append(np.linalg.norm(tps.transform(src) - dst, axis=1).mean())
+        max_weights.append(np.abs(tps.weights).max())
+
+    assert residuals[0] < 1e-6  # exact interpolation at lambda = 0
+    assert all(b >= a - 1e-6 for a, b in zip(residuals, residuals[1:])), residuals  # monotone in lambda
+    assert max(residuals) <= affine_residual + 1e-6  # never worse than the affine fit
+    assert residuals[-1] == pytest.approx(affine_residual, rel=1e-2)  # converges to it (from below)
+    assert max(max_weights) < 5.0, max_weights  # no blow-up (the buggy sign gave ~470)
 
 
 def test_jacobian_determinant_of_pure_affine_matches_analytic_value():

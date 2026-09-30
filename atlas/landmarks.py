@@ -93,8 +93,8 @@ def extract_organ_landmarks(
     sampled over the whole organ volume, not just its boundary), rather than
     a single centroid. A single point gives the golden-transformation
     reliability score (atlas/golden_transform.py) nothing to average over:
-    real data showed a single-centroid organ can swing from 0% to 100%
-    reliable across different atlas pairs purely from one noisy estimate.
+    real data showed the outcome was all-or-nothing: with one centroid each,
+    organ 11 scored 0% reliable and organ 12 100% in the same atlas pairs.
     Interior points are still deliberately NOT boundary/surface points --
     the organ's surface is exactly where two annotators are most likely to
     disagree, which is the noise this is meant to avoid in the first place.

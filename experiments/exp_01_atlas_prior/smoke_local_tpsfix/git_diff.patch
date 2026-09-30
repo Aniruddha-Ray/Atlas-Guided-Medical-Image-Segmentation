@@ -1,0 +1,127 @@
+diff --git a/atlas/landmarks.py b/atlas/landmarks.py
+index c3a2fe1..1e08080 100644
+--- a/atlas/landmarks.py
++++ b/atlas/landmarks.py
+@@ -93,8 +93,8 @@ def extract_organ_landmarks(
+     sampled over the whole organ volume, not just its boundary), rather than
+     a single centroid. A single point gives the golden-transformation
+     reliability score (atlas/golden_transform.py) nothing to average over:
+-    real data showed a single-centroid organ can swing from 0% to 100%
+-    reliable across different atlas pairs purely from one noisy estimate.
++    real data showed the outcome was all-or-nothing: with one centroid each,
++    organ 11 scored 0% reliable and organ 12 100% in the same atlas pairs.
+     Interior points are still deliberately NOT boundary/surface points --
+     the organ's surface is exactly where two annotators are most likely to
+     disagree, which is the noise this is meant to avoid in the first place.
+diff --git a/atlas/tps.py b/atlas/tps.py
+index 0599b8a..adfc08a 100644
+--- a/atlas/tps.py
++++ b/atlas/tps.py
+@@ -21,6 +21,20 @@ correspondences get partially absorbed into the smooth affine+low-frequency
+ part of the field instead of forcing a sharp local bend. This matters here
+ because atlas-to-target correspondences from intensity-patch matching WILL
+ contain some bad matches even after RANSAC.
++
++Sign of the regularisation term: with phi(r) = r the kernel matrix K is
++conditionally NEGATIVE definite (distance matrices are of negative type), so
++the smoothing system is (K - lambda*I), not (K + lambda*I). Minimising
++sum |f(x_i) - v_i|^2 + lambda * bending_energy, with bending energy
++-w'Kw >= 0, gives M[(K - lambda*I) w + P c - v] = 0. The opposite sign is
++near-singular whenever lambda matches an eigenvalue of -K, which produced
++erratic fits (residuals of 100-4000 mm, weights in the hundreds, 40-55 % of
++control points folding) in an earlier version of this file. With the correct
++sign the fit moves smoothly and monotonically from exact interpolation
++(lambda = 0) to the plain affine least-squares fit (lambda -> infinity).
++
++lambda is in units of mm of kernel distance, so useful values are large
++(tens to thousands for control points spread over ~100s of mm), not O(1).
+ """
+ from __future__ import annotations
+ 
+@@ -40,8 +54,8 @@ class ThinPlateSpline:
+ 
+         source_points, target_points: (N, 3), N >= 4 (need at least 4 non-
+         coplanar points to fix the affine part in 3D).
+-        regularization: smoothing parameter (mm-ish scale of allowed
+-        deviation at the control points); 0.0 = exact interpolation.
++        regularization: smoothing weight lambda (see module docstring for its
++        scale); 0.0 = exact interpolation, large = the affine least-squares fit.
+         """
+         source_points = np.asarray(source_points, dtype=np.float64)
+         target_points = np.asarray(target_points, dtype=np.float64)
+@@ -55,7 +69,7 @@ class ThinPlateSpline:
+ 
+         K = _pairwise_distances(source_points, source_points)  # phi(r) = r
+         if regularization > 0:
+-            K = K + regularization * np.eye(n)
++            K = K - regularization * np.eye(n)  # minus: K is conditionally negative definite, see module docstring
+ 
+         P = np.concatenate([np.ones((n, 1)), source_points], axis=1)  # (N, 4): [1, x, y, z]
+ 
+diff --git a/experiments/registration_log.md b/experiments/registration_log.md
+index 06af910..ac636c4 100644
+--- a/experiments/registration_log.md
++++ b/experiments/registration_log.md
+@@ -65,9 +65,12 @@ The mechanics are much more robust, but majority-vote Dice is unchanged.
+ ## Other checks
+ 
+ - **Label semantics are consistent across sources** (amos / img / s): organ
+-  volumes and positions relative to the liver match for all 12 labels.
+-  1 spleen, 2 R kidney, 3 L kidney, 4 gallbladder, 5 esophagus, 6 liver,
+-  7 stomach, 8 aorta, 9 IVC, 10 pancreas, 11 R adrenal, 12 L adrenal.
++  volumes and positions relative to the liver match for all 12 labels
++  (checked on 6 cases per source). Organ names are inferred from volume and
++  position, following the AMOS ordering, and are not confirmed against the
++  dataset documentation: 1 spleen, 2 R kidney, 3 L kidney, 4 gallbladder,
++  5 esophagus, 6 liver, 7 stomach, 8 aorta, 9 IVC, 10 pancreas, 11 R adrenal,
++  12 L adrenal.
+ - **Reliability threshold.** `min_score=0.5` is the 90th percentile and kept
+   only ~38 landmarks per atlas, too few for RANSAC. `0.3` (median) keeps ~220.
+ - **Runtime** on this laptop (RTX 3050): ~110 s per target with TPS, ~220 s
+diff --git a/tests/test_tps.py b/tests/test_tps.py
+index 8a10612..7c4d18e 100644
+--- a/tests/test_tps.py
++++ b/tests/test_tps.py
+@@ -1,4 +1,5 @@
+ import numpy as np
++import pytest
+ 
+ from atlas.tps import ThinPlateSpline
+ 
+@@ -66,6 +67,36 @@ def test_regularization_produces_smoothing_not_exact_interpolation():
+     assert smooth_residual > 1.0  # smoothing spline does not chase the outlier
+ 
+ 
++def test_smoothing_moves_monotonically_from_interpolation_to_affine_fit():
++    """
++    Regression test for a sign error (K + lambda*I instead of K - lambda*I) that
++    made the fit erratic: residuals jumped to 100-1500 mm at moderate lambda and
++    weights grew to the hundreds. A correct smoothing spline has control-point
++    residuals that rise monotonically from 0 (lambda=0) towards the plain affine
++    least-squares residual (lambda -> infinity), and never blow up.
++    """
++    rng = np.random.default_rng(0)
++    src = rng.uniform(-100, 100, (200, 3))
++    A = np.eye(3) + 0.05 * rng.standard_normal((3, 3))
++    dst = src @ A + [5, -3, 2] + 8 * rng.standard_normal((200, 3)) + 15 * np.sin(src / 25)
++
++    X = np.c_[src, np.ones(200)]
++    affine_residual = np.linalg.norm(X @ np.linalg.lstsq(X, dst, rcond=None)[0] - dst, axis=1).mean()
++
++    residuals, max_weights = [], []
++    lambdas = [0.0, 5.0, 20.0, 50.0, 320.0, 1280.0, 5120.0, 1e5]
++    for lam in lambdas:
++        tps = ThinPlateSpline(src, dst, regularization=lam)
++        residuals.append(np.linalg.norm(tps.transform(src) - dst, axis=1).mean())
++        max_weights.append(np.abs(tps.weights).max())
++
++    assert residuals[0] < 1e-6  # exact interpolation at lambda = 0
++    assert all(b >= a - 1e-6 for a, b in zip(residuals, residuals[1:])), residuals  # monotone in lambda
++    assert max(residuals) <= affine_residual + 1e-6  # never worse than the affine fit
++    assert residuals[-1] == pytest.approx(affine_residual, rel=1e-2)  # converges to it (from below)
++    assert max(max_weights) < 5.0, max_weights  # no blow-up (the buggy sign gave ~470)
++
++
+ def test_jacobian_determinant_of_pure_affine_matches_analytic_value():
+     rng = np.random.default_rng(6)
+     A = np.eye(3) + 0.05 * rng.standard_normal((3, 3))

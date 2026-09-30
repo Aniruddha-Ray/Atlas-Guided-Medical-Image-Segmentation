@@ -157,7 +157,7 @@ that code was never affected by this bug.
 | Landmarks | `atlas/landmarks.py` | Surface farthest-point sampling for large organs, interior points for organs under 8 mL (11 and 12 are adrenal-sized, 2.6–5.3 mL) |
 | Golden transformation | `atlas/golden_transform.py`, `atlas/tps.py` | Kabsch pre-alignment on organ centroids, per-organ nearest-neighbour correspondence, regularised 3D TPS |
 | Reliable features (`s_k`, selection) | `atlas/reliable_features.py` | Score averaged over all 9 other atlases, threshold 0.3 (≈ median), per-organ coverage floor |
-| Atlas → target registration | `atlas/matching.py`, `atlas/ransac.py`, `atlas/registration.py` | z-search, similarity, constrained affine → 2-pass NCC patch matching → RANSAC affine → smoothing TPS with a folding check. Optional B-spline refinement (a negative result so far) |
+| Atlas → target registration | `atlas/matching.py`, `atlas/ransac.py`, `atlas/registration.py` | z-search, similarity, constrained affine → 2-pass NCC patch matching → RANSAC affine → smoothing TPS with a folding check. Optional B-spline refinement (no gain, see `experiments/registration_log.md`) |
 | Label warping | `atlas/label_warping.py` | Pull-back through the target → atlas mapping, cached as a 4D stack per target |
 | P(v), D(v), w(v) | `data/transforms.py::AtlasPriorsd` | Computed in the 96³ training space after augmentation. D is in mm, clipped at 50 mm and normalised |
 | Atlas-consistency / CT losses | — | Not started (Experiments 2–4) |
@@ -167,7 +167,7 @@ priors, for training or validation targets. Labels serve only as the supervised
 target and as the evaluation reference. The 10 atlases are never training
 targets. `register_targets.py` and `data/splits.py` enforce this.
 
-**Additional prototype bugs found**
+**Additional bugs found**
 1. `RandRotated(range_x=(-15, 15))`: MONAI ranges are in radians, so the
    baseline trained with arbitrary rotations of up to ±15 rad, not ±15°. The
    default is kept for comparability; `--rotate-range-deg 15` is the corrected
@@ -176,15 +176,39 @@ targets. `register_targets.py` and `data/splits.py` enforce this.
    label about 0.5–0.9 output voxel relative to the CT, which is resized with
    `area`. It affects the baseline too and is documented in
    `tests/test_atlas_priors.py`. Not changed.
+3. **Sign error in my own `atlas/tps.py`** (found while validating
+   `prototype.ipynb`): the smoothing term was `K + λI` where it must be
+   `K − λI`, which made every TPS erratic (residuals up to 4100 mm, 26–55 % of
+   control points folding at moderate λ). Fixed, with a regression test. The
+   library and all cached registrations were rebuilt. It had hidden the benefit
+   of the TPS: the earlier conclusion "TPS adds nothing" was an artefact.
+   `experiments/exp_01_atlas_prior/smoke_local` predates the fix;
+   `smoke_local_tpsfix` supersedes it.
 
-**Key early findings.** Details are in `experiments/registration_log.md`.
-- Atlas-only majority-vote Dice (evaluation only) is 0.32 on 2 validation
-  targets. Landmark RANSAC affine beats intensity-only coarse registration by
-  +0.08 to +0.15 per atlas. TPS does not yet improve on it.
-- Whole-body MI is anti-correlated with organ overlap, so MI-driven B-spline
-  refinement did not help.
-- Smoke test only (2 validation cases, not a result): θ101 evaluated with atlas
-  priors before fine-tuning scores Dice 0.12, against 0.65 with GT priors.
-  The baseline mostly learned to read the GT prior. The 0.6505 number
-  therefore cannot be compared with atlas-prior results, and a no-prior
-  UNETR baseline is needed as the real reference.
+**Key findings.** Details, tables and open tuning items are in
+`experiments/registration_log.md`.
+- Atlas-only majority-vote Dice (evaluation only) is **0.445 and 0.481** on the
+  first two validation targets after the TPS fix (0.321 and 0.321 before). Landmark
+  RANSAC affine beats intensity-only coarse registration by +0.06 to +0.15 per
+  atlas, and the TPS adds up to +0.10 on top. Small organs (4, 11, 12) are still
+  the weakest.
+- Whole-body mutual information is anti-correlated with organ overlap.
+  B-spline refinement driven by it gives 0.443 and 0.458 against TPS-only 0.445
+  and 0.481: no gain at ~1.8× the runtime, so it is not used.
+- Smoke test only (2 validation cases and 3 training steps, not a result):
+  the epoch-101 weights score **0.119 with atlas priors before fine-tuning and
+  0.198 after 3 steps**. The same weights with ground-truth priors score 0.73 on
+  amos_0278 alone (0.68 on the first three cases, 0.65 on the full set). So the
+  baseline mostly learned to read the ground-truth prior, and 0.6505 cannot be
+  compared with atlas-prior results; a no-prior UNETR is still needed as the
+  reference.
+- **Unexplained, worth understanding:** that 0.119 is essentially the same as the
+  0.120 measured before the TPS fix, although atlas-only Dice rose from 0.32 to
+  about 0.46. Untested hypothesis: the model only sees the priors after average
+  pooling over 16³ patches (roughly 40 to 60 mm per patch on this grid) and the
+  epoch-101 weights are tuned to exact, binary priors, so a ~10 mm improvement
+  in registration is invisible to it. If true, registration accuracy is not the
+  bottleneck at this architecture's prior resolution, which Experiment 1 and a
+  sensitivity test (shifting the priors by known amounts) can check.
+- Runtime is ~190 to 250 s per target for registration on this laptop, which
+  matters for planning the ~670-target server run.

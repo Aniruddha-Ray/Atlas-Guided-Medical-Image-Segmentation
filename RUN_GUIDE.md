@@ -7,7 +7,7 @@ Every command runs from the repository root. The dataset is expected at
 
 ```bash
 pip install -r requirements.txt     # pins torch +cu130; change the tag to match your server's CUDA driver
-python -m pytest tests/ -q          # expect 48 passed
+python -m pytest tests/ -q          # expect 49 passed
 ```
 
 ## 1. Atlas library (≈1 min, CPU)
@@ -22,8 +22,10 @@ and writes `cache/atlas_library/atlas_library.npz` plus a summary JSON.
 
 ## 2. Register the atlases onto every target (the expensive step)
 
-Each target takes about 2 min (10 atlases, TPS variant). That is about 670
-targets in total: 534 train (atlases already excluded) and 136 val. Split the
+Each target takes about 3 to 4 min on the 4 GB laptop GPU (10 atlases, TPS variant;
+the B-spline variant is ~6 min). That is about 670 targets in total: 534 train
+(atlases already excluded) and 136 val, i.e. roughly 40 hours on one process, so
+shard it. Split the
 work into shards and run one process per shard:
 
 ```bash
