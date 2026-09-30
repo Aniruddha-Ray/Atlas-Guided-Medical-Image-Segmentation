@@ -212,3 +212,9 @@ targets. `register_targets.py` and `data/splits.py` enforce this.
   sensitivity test (shifting the priors by known amounts) can check.
 - Runtime is ~190 to 250 s per target for registration on this laptop, which
   matters for planning the ~670-target server run.
+
+## Architecture Plan
+
+The diagnosis above leads to a new architecture plan: make the model learn to *use* uncertain atlas priors instead of treating them as corrupted ground truth. The plan adds seven changes (A–G), each switchable via training flags, so the epoch-101 checkpoint remains compatible. Changes include prior dropout, confidence gating, voxel-level prior pathways, output fusion, and atlas-consistency loss.
+
+**See:** `new_model_plan.md` for the full design, implementation details, experiment flow and success metrics.
