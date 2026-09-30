@@ -1,0 +1,16 @@
+commit: 3a86826be12c33a61597469d4ca3408cbd3e4aa3
+uncommitted changes:
+M .gitignore
+ M AtlasGuidedUNETR_fixed.ipynb
+?? atlas/
+?? baseline_reproduction.md
+?? checkpoints/
+?? data/
+?? experiments/
+?? models/
+?? pytest.ini
+?? requirements.txt
+?? research_audit.md
+?? scripts/
+?? tests/
+?? training/

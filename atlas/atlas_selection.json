@@ -1,0 +1,47 @@
+{
+  "atlas_count": 10,
+  "num_organs": 12,
+  "selection_criteria": "all 12 organs present; round-robin balance across source prefixes; drawn only from the training split (seed=42, val_fraction=0.2), never from validation",
+  "cases": [
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset060_Merged_Def\\amos_0001_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset060_Merged_Def\\amos_0001.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset060_Merged_Def\\img0001_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset060_Merged_Def\\img0001.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset060_Merged_Def\\s0004_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset060_Merged_Def\\s0004.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset060_Merged_Def\\amos_0004_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset060_Merged_Def\\amos_0004.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset060_Merged_Def\\img0004_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset060_Merged_Def\\img0004.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset060_Merged_Def\\s0010_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset060_Merged_Def\\s0010.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset060_Merged_Def\\amos_0005_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset060_Merged_Def\\amos_0005.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset060_Merged_Def\\img0006_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset060_Merged_Def\\img0006.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset060_Merged_Def\\s0011_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset060_Merged_Def\\s0011.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset060_Merged_Def\\amos_0007_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset060_Merged_Def\\amos_0007.nii.gz"
+    }
+  ]
+}

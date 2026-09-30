@@ -220,3 +220,8 @@ __marimo__/
 # large .pth files
 best_model.pth
 latest_checkpoint.pth
+# Generated atlas-registration caches (large; rebuild with scripts/build_atlas_library.py and scripts/register_targets.py)
+cache/
+
+# experiment checkpoints (large; configs/metrics/logs next to them ARE tracked)
+experiments/**/*.pth

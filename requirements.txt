@@ -1,0 +1,37 @@
+# Atlas-Guided ViT-UNETR — pinned to what the notebook/scripts actually import.
+#
+# torch/torchvision/torchaudio are pinned to exact +cu130 local versions (not
+# just >=) and fetched via --extra-index-url below. A bare `torch>=2.2` here
+# would happily resolve to the CPU-only PyPI wheel instead of a CUDA build --
+# that's exactly what happened the first time this file was installed on this
+# machine (torch 2.14.0+cpu, torch.cuda.is_available() == False, despite an
+# RTX 3050 being present) and it went unnoticed until baseline reproduction
+# needed the GPU. Pinning the exact `+cu130` version makes pip resolve
+# unambiguously to the CUDA wheel instead of picking the highest-version
+# match across both indexes.
+#
+# If you're on a different GPU/driver, replace cu130 below (and in
+# --extra-index-url) with the CUDA tag matching your driver (see
+# https://pytorch.org/get-started/locally/), or use the CPU wheels via
+# `pip install torch==2.14.0 torchvision==0.29.0 torchaudio==2.11.0` instead.
+--extra-index-url https://download.pytorch.org/whl/cu130
+
+torch==2.14.0+cu130
+torchvision==0.29.0+cu130
+torchaudio==2.11.0+cu130
+monai==1.6.0
+pytorch-lightning>=2.2
+einops>=0.7
+nibabel>=5.2
+numpy>=1.26
+pandas>=2.2
+matplotlib>=3.8
+scipy>=1.11
+
+# Atlas-to-target registration (affine + B-spline refinement, label warping).
+# Used by atlas/atlas_pipeline.py — previously imported in the notebook (cell 15)
+# but never declared as a dependency, so that cell could not actually run.
+SimpleITK>=2.3
+
+# Baseline reproduction / unit tests
+pytest>=8.0

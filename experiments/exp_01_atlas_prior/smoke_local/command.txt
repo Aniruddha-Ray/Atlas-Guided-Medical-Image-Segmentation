@@ -1,0 +1,1 @@
+C:\Users\Asus\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\python.exe scripts/train.py --run-name smoke_local --limit-train 3 --limit-val 2 --epochs 1 --max-steps-per-epoch 3 --allow-missing --amp
