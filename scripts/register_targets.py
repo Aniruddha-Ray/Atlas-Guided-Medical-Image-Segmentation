@@ -142,6 +142,8 @@ def main():
     parser.add_argument("--eval-gt", action="store_true", help="report atlas-only Dice vs GT (evaluation only)")
     parser.add_argument("--qa-png", action="store_true")
     parser.add_argument("--force", action="store_true", help="recompute even if cached output exists")
+    parser.add_argument("--continue-on-error", action="store_true",
+                        help="log a failing target and go on with the next one instead of stopping the shard")
     parser.add_argument("--device", default=None)
     parser.add_argument("--refinement", choices=["none", "bspline"], default="none", help="dense refinement after landmark TPS")
     parser.add_argument("--num-shards", type=int, default=1, help="split the target list across N parallel processes")
@@ -176,6 +178,7 @@ def main():
     atlas_cts = [resample_isotropic(read_ct(e["image"]), cfg.match_spacing_mm, sitk.sitkLinear, -1000.0) for e in library]
     atlas_labels = [read_label(e["label"]) for e in library]
 
+    failures = []
     print(f"Registering {len(library)} atlases onto {len(targets)} target(s) [{args.split}, variant={variant}]")
     for t_idx, target in enumerate(targets):
         name = case_name(target["image"])
@@ -185,64 +188,76 @@ def main():
             print(f"[{t_idx + 1}/{len(targets)}] {name}: cached, skipping")
             continue
 
-        t0 = time.time()
-        prep = prepare_target(read_ct(target["image"]), cfg)
-        warped, per_atlas, warped_ct0 = [], [], None
-        for a_idx, entry in enumerate(library):
-            ta = time.time()
-            reg = register_atlas_to_target(atlas_cts[a_idx], entry["points"], prep, cfg, device=args.device)
-            tx = reg.to_sitk_transform(prep["grid"])
-            warped.append(warp_label(atlas_labels[a_idx], prep["grid"], tx))
-            if a_idx == 0 and args.qa_png:
-                warped_ct0 = warp_ct(atlas_cts[0], prep["grid"], tx)
-            qa = {k: v for k, v in reg.qa.items() if k != "config"}
-            qa.update(atlas=case_name(entry["image"]), time_s=round(time.time() - ta, 1))
-            per_atlas.append(qa)
-            bs = qa.get("bspline")
-            bs_msg = "" if bs is None else f"  bspline {'kept' if bs['kept'] else 'REJECTED'} MI {bs['metric_before']:.3f}->{bs['metric_after']:.3f} fold={bs['fold_fraction']:.4f}"
-            print(
-                f"    atlas {a_idx}: {qa['status']:<18s} inliers={qa['ransac'].get('num_inliers', 0):3d}"
-                f"/{qa['num_candidates']:3d} cand  fold={qa.get('fold_fraction', float('nan')):.4f}{bs_msg}  {qa['time_s']}s"
-            )
+        try:
+            t0 = time.time()
+            prep = prepare_target(read_ct(target["image"]), cfg)
+            warped, per_atlas, warped_ct0 = [], [], None
+            for a_idx, entry in enumerate(library):
+                ta = time.time()
+                reg = register_atlas_to_target(atlas_cts[a_idx], entry["points"], prep, cfg, device=args.device)
+                tx = reg.to_sitk_transform(prep["grid"])
+                warped.append(warp_label(atlas_labels[a_idx], prep["grid"], tx))
+                if a_idx == 0 and args.qa_png:
+                    warped_ct0 = warp_ct(atlas_cts[0], prep["grid"], tx)
+                qa = {k: v for k, v in reg.qa.items() if k != "config"}
+                qa.update(atlas=case_name(entry["image"]), time_s=round(time.time() - ta, 1))
+                per_atlas.append(qa)
+                bs = qa.get("bspline")
+                bs_msg = "" if bs is None else f"  bspline {'kept' if bs['kept'] else 'REJECTED'} MI {bs['metric_before']:.3f}->{bs['metric_after']:.3f} fold={bs['fold_fraction']:.4f}"
+                print(
+                    f"    atlas {a_idx}: {qa['status']:<18s} inliers={qa['ransac'].get('num_inliers', 0):3d}"
+                    f"/{qa['num_candidates']:3d} cand  fold={qa.get('fold_fraction', float('nan')):.4f}{bs_msg}  {qa['time_s']}s"
+                )
 
-        stack = save_label_stack(warped, prep["grid"], stack_path)
-        record = {
-            "target": target["image"],
-            "grid_spacing_mm": cfg.match_spacing_mm,
-            "variant": variant,
-            "config": asdict(cfg),
-            "atlases": per_atlas,
-            "status_counts": {s: sum(p["status"] == s for p in per_atlas) for s in ("tps", "ransac_affine_only", "coarse_affine_only")},
-            "elapsed_s": round(time.time() - t0, 1),
-        }
-
-        counts = None
-        gt = None
-        if args.eval_gt or args.qa_png:
-            counts = vote_counts(stack, NUM_CLASSES)
-        if args.eval_gt:
-            gt = to_xyz_array(resample_to_grid(read_label(target["label"]), prep["grid"], sitk.sitkNearestNeighbor, 0))
-            mv = counts.argmax(axis=0)
-            mas = dice_per_organ(mv, gt)
-            single = [dice_per_organ(stack[..., k], gt) for k in range(stack.shape[-1])]
-            record["evaluation_only"] = {
-                "note": "GT used only for this report, never for building priors",
-                "majority_vote_dice": mas,
-                "majority_vote_mean_dice": float(np.nanmean(list(mas.values()))),
-                "single_atlas_mean_dice": [float(np.nanmean(list(s.values()))) for s in single],
+            stack = save_label_stack(warped, prep["grid"], stack_path)
+            record = {
+                "target": target["image"],
+                "grid_spacing_mm": cfg.match_spacing_mm,
+                "variant": variant,
+                "config": asdict(cfg),
+                "atlases": per_atlas,
+                "status_counts": {s: sum(p["status"] == s for p in per_atlas) for s in ("tps", "ransac_affine_only", "coarse_affine_only")},
+                "elapsed_s": round(time.time() - t0, 1),
             }
 
-        with open(qa_path, "w", encoding="utf-8") as f:
-            json.dump(record, f, indent=2)
-        if args.qa_png:
-            save_qa_png(os.path.join(dirs["qa"], f"{name}.png"), prep["grid"], warped_ct0, counts, gt, len(library))
+            counts = None
+            gt = None
+            if args.eval_gt or args.qa_png:
+                counts = vote_counts(stack, NUM_CLASSES)
+            if args.eval_gt:
+                gt = to_xyz_array(resample_to_grid(read_label(target["label"]), prep["grid"], sitk.sitkNearestNeighbor, 0))
+                mv = counts.argmax(axis=0)
+                mas = dice_per_organ(mv, gt)
+                single = [dice_per_organ(stack[..., k], gt) for k in range(stack.shape[-1])]
+                record["evaluation_only"] = {
+                    "note": "GT used only for this report, never for building priors",
+                    "majority_vote_dice": mas,
+                    "majority_vote_mean_dice": float(np.nanmean(list(mas.values()))),
+                    "single_atlas_mean_dice": [float(np.nanmean(list(s.values()))) for s in single],
+                }
 
-        msg = f"[{t_idx + 1}/{len(targets)}] {name}: {record['status_counts']} in {record['elapsed_s']}s"
-        if args.eval_gt:
-            ev = record["evaluation_only"]
-            msg += f" | atlas-only Dice (eval): majority {ev['majority_vote_mean_dice']:.4f}"
-            msg += " | per organ " + " ".join(f"{c}:{d:.2f}" for c, d in ev["majority_vote_dice"].items())
-        print(msg)
+            with open(qa_path, "w", encoding="utf-8") as f:
+                json.dump(record, f, indent=2)
+            if args.qa_png:
+                save_qa_png(os.path.join(dirs["qa"], f"{name}.png"), prep["grid"], warped_ct0, counts, gt, len(library))
+
+            msg = f"[{t_idx + 1}/{len(targets)}] {name}: {record['status_counts']} in {record['elapsed_s']}s"
+            if args.eval_gt:
+                ev = record["evaluation_only"]
+                msg += f" | atlas-only Dice (eval): majority {ev['majority_vote_mean_dice']:.4f}"
+                msg += " | per organ " + " ".join(f"{c}:{d:.2f}" for c, d in ev["majority_vote_dice"].items())
+            print(msg)
+        except Exception as e:
+            if not args.continue_on_error:
+                raise
+            failures.append({"case": name, "error": f"{type(e).__name__}: {e}"})
+            print(f"[{t_idx + 1}/{len(targets)}] {name}: FAILED ({type(e).__name__}: {e}), continuing", flush=True)
+
+    if failures:
+        fail_path = os.path.join(dirs["registrations"], f"_failures_{args.split}_shard{args.shard_index}.json")
+        with open(fail_path, "w", encoding="utf-8") as f:
+            json.dump(failures, f, indent=2)
+        print(f"{len(failures)} target(s) failed, listed in {fail_path}")
 
 
 if __name__ == "__main__":
