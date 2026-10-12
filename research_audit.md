@@ -188,10 +188,12 @@ targets. `register_targets.py` and `data/splits.py` enforce this.
 **Key findings.** Details, tables and open tuning items are in
 `experiments/registration_log.md`.
 - Atlas-only majority-vote Dice (evaluation only) is **0.445 and 0.481** on the
-  first two validation targets after the TPS fix (0.321 and 0.321 before). Landmark
+  first two validation targets after the TPS fix (0.321 and 0.321 before). **These two
+  cases were optimistic; the full-set figure is 0.392 (Section I.1).** Landmark
   RANSAC affine beats intensity-only coarse registration by +0.06 to +0.15 per
   atlas, and the TPS adds up to +0.10 on top. Small organs (4, 11, 12) are still
   the weakest.
+- **Full validation set (136 targets):** atlas-only Dice is **0.392 mean, 0.402 median**, so the 0.445 and 0.481 above were optimistic two-case values. Targets where 3 or more of the 10 atlases fell back to the coarse affine average 0.08 against 0.425 with none, and every scan shorter than 150 mm in z failed. Details in `experiments/registration_log.md`.
 - Whole-body mutual information is anti-correlated with organ overlap.
   B-spline refinement driven by it gives 0.443 and 0.458 against TPS-only 0.445
   and 0.481: no gain at ~1.8× the runtime, so it is not used.
@@ -218,3 +220,175 @@ targets. `register_targets.py` and `data/splits.py` enforce this.
 The diagnosis above leads to a new architecture plan: make the model learn to *use* uncertain atlas priors instead of treating them as corrupted ground truth. The plan adds seven changes (A–G), each switchable via training flags, so the epoch-101 checkpoint remains compatible. Changes include prior dropout, confidence gating, voxel-level prior pathways, output fusion, and atlas-consistency loss.
 
 **See:** `new_model_plan.md` for the full design, implementation details, experiment flow and success metrics.
+
+## I. Consolidated findings (as of 2026-10-12)
+
+Everything learned so far in one place, split into what was measured, what is a
+hypothesis, and what I got wrong along the way. Detailed tables are in
+`experiments/registration_log.md`; the redesign is in `new_model_plan.md`.
+
+### I.1 Registration quality on the full validation set
+
+136 validation targets, the current 10 atlases, TPS variant, no errors, ~200 s per target.
+Atlas-only majority-vote Dice (target labels used for evaluation only), scored from the
+log for 130 of the 136 targets.
+
+| | Value |
+|---|---|
+| Mean / median | **0.392 / 0.402** |
+| 10th to 90th percentile | 0.222 to 0.546 |
+| Min / max | 0.000 / 0.594 |
+| By source (mean) | amos 0.394 (n=56), img 0.403 (n=6), s 0.390 (n=68) |
+| Targets below 0.25 | 18 of 130 |
+
+- **Fallbacks dominate the failures.** Targets with 0 of the 10 atlases falling back to
+  the coarse affine: 102, mean Dice 0.425. Targets with 3 or more fallbacks: 6, mean 0.080.
+- **Short scans all fail.** Every target covering under 150 mm in z (s1270, s0795,
+  s1420, s1155, s1255; all `s`, 1.5 mm slices) is in the low group; three score 0.00 with
+  4 to 7 fallback atlases. No target outside the low group is under 194 mm. The cause is
+  untested (likely too little overlap with the atlases, so too few RANSAC inliers).
+- **13 of the 18 low cases are not explained by scan length**: three AMOS cases with 5 mm
+  slices and 485 to 560 mm z-extent (amos_0063, amos_0383, amos_0149) and long `s` scans
+  (350 to 546 mm). Causes unknown.
+- Small organs stay weakest: organ 4 is ~0.00 on the cases inspected and organs 11 and 12
+  are near 0 on most.
+
+### I.2 What each registration stage contributes
+
+Single-atlas, amos_0278, after the TPS fix: coarse affine 0.16 to 0.36, landmark RANSAC
+affine 0.26 to 0.44, TPS 0.26 to 0.54. Landmarks improve on intensity-only coarse
+registration by +0.06 to +0.15, and the TPS adds up to +0.10 on top. This is one case and
+three atlases: indicative, not an average.
+
+### I.3 Negative results
+
+- **B-spline refinement on whole-body mutual information gives no gain**: 0.443 and 0.458
+  against TPS-only 0.445 and 0.481 on two cases, at ~1.8x the runtime. The metric improves
+  in every pair while organ overlap does not. Whole-body MI is anti-correlated with organ
+  overlap (the coarse stage has the best MI and worst Dice), so it is the wrong objective.
+  Not used; `--refinement bspline` remains as an ablation. A better candidate would be an
+  organ-focused objective (untested).
+- **Earlier "TPS adds nothing" was wrong**: it was an artefact of the sign bug below.
+
+### I.4 Bugs found and fixed
+
+| Bug | Effect | Status |
+|---|---|---|
+| TPS smoothing sign (`K + lambda*I` instead of `K - lambda*I`), my own code | Erratic fits: residuals up to 4100 mm, 26 to 55 % of control points folding at moderate lambda. Hid the TPS benefit; atlas-only Dice 0.32 -> ~0.45 on two cases once fixed | Fixed, regression test added, library and caches rebuilt |
+| Distance map semantics inverted in `CustomSpatialDistanceTransformd` | Baseline trained with D = 0 inside organs growing outward in the wrong sense | Fixed; `legacy_buggy_distance` keeps epoch-101 reproducible |
+| `RandRotated` range in radians, not degrees | Baseline trained with rotations up to +-15 rad | Default kept for comparability; `--rotate-range-deg 15` is the ablation |
+| Nearest-neighbour label resize offset | Label shifted ~0.5 to 0.9 voxel against the CT | Documented, not changed |
+| Torch resolved to a CPU wheel | Training would have run on CPU | `requirements.txt` pins the CUDA build |
+| Coarse affine scale collapse (0.19x on one atlas pair) | Bad atlas warps | Fixed with z-offset search, similarity stage and scale limits |
+
+### I.5 Baseline weights with ground-truth vs atlas priors (the key diagnosis)
+
+On amos_0278 with the epoch-101 weights:
+
+| Prior | Dice |
+|---|---|
+| Ground-truth prior (what the baseline was trained with) | 0.727 |
+| Atlas prior (TPS pipeline) fed to the same weights | 0.12 to 0.13 |
+| Atlas majority vote on its own (no network) | 0.42 (96^3 grid) to 0.445 (2 mm grid) |
+
+The 0.727 is one case; the full-set figure for the baseline is 0.65 (0.68 on the first
+three). The network scores far below the prior it is given, so it reads exact priors, not
+noisy ones, and 0.65 is not comparable with any atlas-prior result. **The 0.12 did not
+move when atlas-only Dice rose from 0.32 to ~0.45** (0.120 before the TPS fix, 0.119 after).
+Untested hypothesis: priors enter only through 16^3-patch average pooling, so a ~10 mm
+registration gain is invisible. A sensitivity test (shift the priors by known amounts) would
+settle it.
+
+### I.6 First results of the redesigned model (`exp_02_prototype_v2`, `exp_03_v2_full_nbtest`)
+
+Source: commit f7f67f6, `scripts/train_prototype_v2.py`, `experiments/exp_02_*` and `exp_03_*`.
+The redesigned model lives in `prototype.ipynb` ("#v2-cell definitions"); `models/` is not yet
+changed. Per the commit message and the script docstring it passed 21 notebook checks;
+I have not re-run or reviewed those checks.
+
+**`v2_scratch_chunk`: a small from-scratch run, not a test of the idea.**
+24 training cases, 6 validation cases, 60 epochs, effective batch 2 (micro-batch 1 x 2
+accumulation, 12 optimiser steps per epoch, ~720 in total), lr 2e-4 down to 1e-5,
+prior dropout 0.3, consistency weight 0.1 ramped over 10 epochs. The conf-gating, voxel-prior
+and output-fusion flags were all switched on together.
+
+| Measure | Value |
+|---|---|
+| Final validation Dice (epoch 60, also the best) | **0.168** |
+| Atlas-only Dice on the same 6 validation cases | **0.350** |
+| Validation Dice with the prior removed (epoch 60) | 0.054 |
+| Organs above 0.1 | liver (6) 0.77, organ 3 0.51, aorta (8) 0.51, stomach (7) 0.18 |
+| Organs at or near 0 | 1, 4, 5, 10, 11, 12 (and 2 at 0.04, 9 at 0.01) |
+| Mean gate (starts at 1) / mean output-fusion gamma (starts at 0) | 0.990 / 0.069 |
+
+Reading it:
+- The model is **well below the atlas vote it was given** (0.168 against 0.350), so it is not
+  yet using the prior efficiently.
+- Dropping the prior cuts Dice from 0.168 to 0.054: it does rely on the prior, but weakly.
+- The gates barely moved and gamma only reached ~0.07 after ~720 steps. A gamma near 1 would
+  reproduce the atlas vote at the output, so with this learning rate the fusion term is
+  learning too slowly to help within this run. This is a hypothesis; a larger gamma
+  learning rate or initialisation is the obvious test.
+- Validation Dice rose until about epoch 13 (0.139) and then crept up to 0.168. With 24
+  training cases the model only learned the large organs.
+- **Because all new components were switched on at once, nothing in this run can be
+  attributed to any single one.** The plan called for one change at a time.
+
+**`v2_full` (exp_03): a 3-epoch notebook test with the full-data configuration**: validation
+Dice 0.0035. It checks that the pipeline runs end to end; it is not a result.
+
+**Timing** (`bench.json`, micro-batch 1, fp16): 2.29 s per training step, 2.39 s per
+validation case, peak 2.95 of 4.0 GiB GPU memory. Extrapolated, not measured: a full pass
+over 534 training cases plus 136 validation cases is about 26 minutes per epoch on this laptop.
+
+Both run configs record `NVIDIA GeForce RTX 3050 Laptop GPU` and Windows paths, so these
+runs were done on the laptop, despite the commit message saying "server".
+
+### I.7 Concerns raised by the user, with the evidence behind them
+
+1. **The atlases are not perfect, yet are treated as ground truth.** Correct. The 10 were picked
+   as "existing labeled cases", 3 to 4 per source, with no quality check. Slice thickness of the
+   ten: **4 are 5 mm (amos_0001, 0004, 0005, 0007), 3 are 3 mm (img), 3 are 1.5 mm (s)**, so
+   40 % have coarse z resolution and interpolated labels. The confidence map w(v) measures
+   disagreement between atlases, so an error shared by several atlases looks confident. Label
+   quality of the 10 has **not** been audited. Remedy: explicit selection criteria (slice
+   thickness at most 3 mm, all 12 organs present, plausible volumes, no pathology or artefacts,
+   visual check), or the doctor-annotated atlases. Changing the atlases invalidates every
+   registration cache, so this must be settled before the ~534-target training registration.
+2. **The registration process is inefficient.** ~200 s per target (~20 s per atlas), ~40 hours
+   for all 670 targets on this laptop, with mean Dice only 0.39. Time per stage has not been
+   profiled. Candidates: best 3 to 5 atlases per target by coarse similarity instead of all 10,
+   TPS evaluation on the GPU, skipping the second matching pass where the first is good,
+   and dropping an atlas for a target when its overlap or inlier count is too low. Accuracy,
+   not speed, is the bigger problem.
+
+### I.8 Corrections to things I said earlier
+
+- The two-case figures 0.445 and 0.481 were optimistic; the full-set mean is 0.392.
+- Registration time: I first quoted ~110 s per target; the measured figure is 190 to 250 s.
+- My "no folding" remark about the first TPS had checked 20 points of one organ.
+- In `new_model_plan.md`, the first draft multiplied the whole ViT stream by tanh(0), which
+  would have destroyed the pretrained features; the encoder1 description was wrong; the
+  output-fusion term used log-odds where a softmax needs the log-prior; and one success
+  metric was logically inverted. All corrected in that file. I also stated the plan was 970
+  lines when it was about 390.
+
+### I.9 Measured versus hypothesis
+
+| Measured | Hypothesis, not yet tested |
+|---|---|
+| Full-set atlas-only Dice 0.392; fallbacks and short scans fail | Short scans fail because of low overlap and too few inliers |
+| Baseline 0.73 with ground-truth priors, 0.12 to 0.13 with atlas priors on amos_0278 | 16^3 pooling hides registration detail |
+| B-spline on whole-body MI gives no gain | An organ-focused objective would |
+| v2 from scratch on 24 cases reaches 0.168, below the 0.350 atlas vote | Output fusion needs a larger gamma learning rate; more data would help |
+| Four of ten atlases have 5 mm slices | Atlas label quality limits accuracy |
+
+### I.10 Open work, in order
+
+1. Decide on the atlas set (audit, or the doctor-annotated atlases) **before** registering the
+   training targets.
+2. Run the image-only baseline (plan step 0); `val_dice_no_prior` of the v2 model is not the
+   same thing.
+3. Re-run the v2 model one component at a time, and from the epoch-101 weights, on more data.
+4. Prior-shift sensitivity test, and a profile of the registration stages.
+5. Tune the registration on non-atlas training targets, never on validation.

@@ -109,6 +109,51 @@ until this is tuned (see below).
 0.32 and 0.50). Share kept by threshold: ≥ 0.3: 76 %, ≥ 0.4: 57 %, ≥ 0.5: 33 %,
 ≥ 0.6: 13 %. Organs 11 and 12 keep ~4.7 and ~4.5 landmarks per atlas.
 
+## Full validation set (136 targets, current 10 atlases, TPS variant)
+
+Finished 2026-10-12, no errors, ~200 s per target. Atlas-only majority-vote Dice
+(evaluation only), scored from the run log for 130 of the 136 targets (the other 6
+were registered in earlier runs and are not in this log).
+
+| | Value |
+|---|---|
+| Mean / median Dice | **0.392 / 0.402** |
+| 10th to 90th percentile | 0.222 to 0.546 |
+| Min / max | 0.000 / 0.594 |
+| By source (mean) | amos 0.394 (n=56), img 0.403 (n=6), s 0.390 (n=68) |
+| Targets below 0.25 | 18 of 130 |
+
+**The two-case figures above (0.445 and 0.481) were optimistic**: those cases were
+inspected while building the pipeline and are better than typical. Use 0.39 as the
+current realistic level.
+
+**Fallbacks matter a lot.** Number of the 10 atlases that fell back to the coarse
+affine for a target, against that target's Dice:
+
+| Fallback atlases | Targets | Mean Dice |
+|---|---|---|
+| 0 | 102 | 0.425 |
+| 1 to 2 | 22 | not computed |
+| 3 or more | 6 | **0.080** |
+
+**Short field of view fails.** Every target whose scan covers under 150 mm in z
+(5 of them, all `s` cases with 1.5 mm slices: s1270, s0795, s1420, s1155, s1255)
+is in the low group, three of them at Dice 0.00 with 4 to 7 fallback atlases. No
+target outside the low group has a z-extent under 194 mm. Likely cause (not
+tested): partial organs and too little overlap with the atlases, so landmark
+matching finds too few inliers.
+
+**The other 13 low cases are not explained by field of view.** They include three
+AMOS cases with 5 mm slices and 485 to 560 mm z-extent (amos_0063, amos_0383,
+amos_0149), and long `s` scans (350 to 546 mm). Causes are unknown; whole-body
+extent and 5 mm slices are hypotheses only.
+
+Implication for tuning: look at these failures on **training** targets with the
+same properties, not on validation. The cheapest candidate fixes are a better
+coarse stage for short or very long fields of view and rejecting an atlas for a
+target when its overlap or inlier count is too low, instead of voting with its
+coarse affine.
+
 ## B-spline refinement (dense, whole-body MI)
 
 Re-run after the fix (same 2 targets, same settings: B-spline on body-masked mutual
