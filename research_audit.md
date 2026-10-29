@@ -392,3 +392,31 @@ runs were done on the laptop, despite the commit message saying "server".
 3. Re-run the v2 model one component at a time, and from the epoch-101 weights, on more data.
 4. Prior-shift sensitivity test, and a profile of the registration stages.
 5. Tune the registration on non-atlas training targets, never on validation.
+
+### I.11 Quality-selected atlases (2026-10-28)
+
+Following the atlas-quality concern in I.7, `scripts/select_quality_atlases.py` selected 10 candidate atlases from the
+training split by explicit header and label criteria (slice <= 3 mm, z-extent >= 300 mm, clean labels, plausible organ
+volumes, source quota amos 4 / img 1 / s 5), with a visual and HU check (`scripts/atlas_montage.py`). On 12 separate
+training targets the atlas-only Dice rose from **0.380 to 0.450** (+0.070, standard error 0.017, better on 11 of 12;
+gallbladder 0.02 to 0.19, spleen 0.46 to 0.59). Details and caveats in `experiments/registration_log.md`. Only one
+candidate set was compared, so it is suitable, not shown to be optimal.
+
+**Adopted on 2026-10-28** as `atlas/atlas_selection.json` (old ten kept as `atlas/atlas_selection_v1.json`). All
+old-atlas caches were moved to `cache/v1_atlases/`. From this point the sections above that quote validation results
+(I.1: 0.392 mean Dice, the failure analysis, the baseline comparison in I.5) describe the **old** atlases and serve
+as the "before" reference; the validation set still has to be re-registered with the new atlases (136 targets, about
+7.3 hours on the laptop) before new validation numbers exist.
+
+### I.12 CT-physics losses implemented (2026-10-28)
+
+`training/physics_losses.py` implements the HU-consistency and edge-aware losses of `model_walkthrough.md` 6.3, wired
+into `scripts/train_prototype_v2.py` behind `--hu-weight` / `--edge-weight` (default 0, ramped like the consistency
+weight). Verified: 11 unit tests (60 of 60 in the suite pass); a 3-epoch mixed-precision smoke run with both terms on
+had no NaNs or skipped steps. Real-data check on 12 training scans: the HU loss scores the true labels at 4.20 against
+6.29 for the atlas vote (truth better on 10 of 12 scans) and 7.59 for the truth shifted by 2 voxels (12 of 12); the
+edge loss separates the truth from the shifted truth (12 of 12) but not from the atlas vote (6 of 12), so it is
+expected to act mainly as a smoothness term. HU statistics exist for a median of 6 of 12 organs per scan; small
+organs never get them. Cost: step time 0.88 → 1.37 s, peak GPU memory 2.95 → 3.23 GiB. Suggested starting weights
+from loss magnitudes (not tuned): 0.03 and 50. The formulations are ours; the original report's definitions are not
+in the repository. Not yet evaluated in a real training run; plan steps 8 and 9 in `new_model_plan.md`.

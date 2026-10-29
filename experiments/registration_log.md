@@ -154,6 +154,48 @@ coarse stage for short or very long fields of view and rejecting an atlas for a
 target when its overlap or inlier count is too low, instead of voting with its
 coarse affine.
 
+## Atlas set comparison: current 10 vs quality-selected 10 (2026-10-28)
+
+The current atlases were the first 10 cases with all 12 organs present, round-robin by source, with no quality
+check (four have 5 mm slices). `scripts/select_quality_atlases.py` scanned the training split (544 cases, labels
+and headers only) and kept cases with slice <= 3 mm and in-plane <= 1.6 mm, z-extent >= 300 mm, every organ's
+largest connected component >= 90 % of its voxels, organ volumes within 0.3 to 3.0x the pool median and kidney
+ratio <= 2.0 (200 of 544 pass), ranked by solid-organ volume typicality with a quota of amos 4, img 1, s 5. An
+organ-to-border margin check was tried and dropped: the `s` volumes are tight crops, so it rejected nearly all of
+them. Chosen (`atlas/atlas_selection_v2.json`): amos_0218, amos_0337, amos_0350, amos_0301, img0032, s0864,
+s1322, s0991, s0591, s0723. All have plausible soft-tissue HU (liver 34 to 121) and the same RAS orientation, and a
+montage shows labels on the right organs (`experiments/atlas_candidates/montage_v2.png`). Header and label checks
+cannot see pathology or subtle label errors.
+
+**Evaluation on separate training targets** (12 non-atlas, non-validation targets from the v2 chunk: 4 amos,
+6 s, 2 img; same targets and scoring script for both sets; the selection used no registration results). Results in
+`experiments/atlas_candidates/old_atlases_train12.json` and `new_atlases_train12.json`.
+
+| | Old atlases | New atlases |
+|---|---|---|
+| Mean atlas-only Dice | 0.380 | **0.450** |
+| Median | 0.379 | 0.428 |
+| New better on | | 11 of 12 targets |
+| By source (mean) | amos 0.360, s 0.423, img 0.291 | amos 0.441, s 0.489, img 0.348 |
+
+Paired difference +0.070 (standard error 0.017). Per organ (1 to 12), old: 0.46 0.70 0.60 0.02 0.26 0.72 0.38 0.51 0.50
+0.24 0.11 0.07; new: 0.59 0.74 0.62 0.19 0.32 0.77 0.45 0.61 0.59 0.28 0.18 0.05. The largest gains are the gallbladder
+(0.02 to 0.19), spleen, aorta, IVC and stomach; the adrenals stay very low.
+
+Caveats: 12 targets is a small sample; the number of atlases that fell back to the coarse affine did not drop (5 of
+120 for the new set against 3 of 120 for the old); only one candidate set was tried, so these 10 are suitable, not
+shown to be optimal.
+
+**Adopted on 2026-10-28.** The new ten replaced `atlas/atlas_selection.json` (the old ten are kept as
+`atlas/atlas_selection_v1.json`). Because all earlier results were built on the old atlases, every old-atlas cache
+(library, QA, registrations, warped labels and the v2 on-disk sample caches) was moved, not deleted, to
+`cache/v1_atlases/`. The new library and the 12 already-registered training targets are installed in `cache/`.
+Checks after the switch: library, selection and cached stacks list the same 10 atlases; none is in the validation
+split (534 training targets remain after removing atlases); 49 of 49 tests pass; registration takes about 193 s per
+target (163 to 260, n = 12). **Every number above this section that says "validation" or "the current atlases"
+(for example the 0.392 validation mean) refers to the OLD atlases** and is the "before" reference. Still to register
+with the new atlases: 136 validation and 522 training targets.
+
 ## B-spline refinement (dense, whole-body MI)
 
 Re-run after the fix (same 2 targets, same settings: B-spline on body-masked mutual

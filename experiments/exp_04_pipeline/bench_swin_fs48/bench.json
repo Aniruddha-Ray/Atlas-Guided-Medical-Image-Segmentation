@@ -1,0 +1,10 @@
+{
+  "first_pass_s_per_case": 1.9627650380134583,
+  "data_s_per_sample_main_process": 1.9151479601860046,
+  "step_s_per_micro_batch": 6.065136194229126,
+  "micro_batch": 1,
+  "val_s_per_case": 4.356524348258972,
+  "num_workers": 2,
+  "peak_gpu_gib": 5.259582996368408,
+  "gpu_total_gib": 3.99951171875
+}

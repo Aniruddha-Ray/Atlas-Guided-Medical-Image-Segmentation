@@ -234,17 +234,17 @@ def train_one_epoch(..., consistency_weight=0.0, consistency_ramp_epochs=10, cur
 
 ---
 
-### G. CT edge loss and HU loss (Experiment 3 & 4, future)
+### G. CT HU-consistency loss and edge loss (Experiments 3 and 4)
 
-**Where:** `training/engine.py` → new loss functions
+**Where:** `training/physics_losses.py`, wired into `scripts/train_prototype_v2.py` (`--hu-weight`, `--edge-weight`, both 0 by default, ramped in like the consistency weight).
 
-**What:** 
-- **CT edge loss:** Encourage high confidence where CT edges exist (organ boundaries).
-- **HU loss:** Regularize the model to respect Hounsfield unit ranges per organ.
+**What:** (full derivation and formulas in `model_walkthrough.md`, Section 6.3)
+- **HU consistency:** voxels predicted as organ c should match this scan's HU for organ c. Per-scan median and robust sigma come from the confident atlas core (P_c >= 0.9, w >= 0.8, at least 50 voxels), never from the target label. Huber penalty, normalised by the predicted organ volume, averaged over the organs that have a core.
+- **Edge-aware:** penalises predicted boundaries where the smoothed CT is flat, weight exp(-|grad I| / kappa), gradients in mm from each sample's spacing.
 
-**Why:** Paper Experiments 3 and 4. Only implement if Experiment 2 helps.
+**Why:** Paper Experiments 3 and 4.
 
-**Status:** Documented, not yet implemented.
+**Status:** implemented and tested (11 unit tests; a 3-epoch mixed-precision smoke run had no NaNs or skipped steps). On 12 real training scans the HU loss ranks the true labels above the atlas vote on 10 of 12 scans; the edge loss detects shifted boundaries but cannot separate truth from the atlas vote (6 of 12), so it is expected to act mainly as a smoothness term. Cost: +56 % step time, +0.28 GiB peak memory. Suggested starting weights from loss magnitudes: `--hu-weight 0.03`, `--edge-weight 50`. **Not yet evaluated in a real training run.**
 
 ---
 
@@ -283,17 +283,83 @@ Measured: the epoch-101 weights give 0.727 with ground-truth priors and 0.13 wit
 
 ## Experiment Flow
 
-All runs on the same train/val split, augmentation and 96³ grid. **Heavy runs go to the server.** Local smoke tests only.
+All runs on the same train/val split, augmentation and 96³ grid. **No server: every run is on the laptop (RTX 3050, 4 GB)**; the chunk is 150 train / 50 val.
 
 | Step | What | Flag(s) | Why | Validation gate |
 |---|---|---|---|---|
-| 0 | **Stock UNETR, no priors** | new (`--prior-source none` does **not exist yet**; `PRIOR_KEYS` has only `gt` and `atlas`; needs a prior-free model path) | Baseline: image alone | Essential reference R |
+| 0 | **Stock UNETR, no priors** | `--image-only` (added 2026-10-28; uninformative priors in training and validation) | Baseline: image alone | Essential reference R |
 | 1 | Fine-tune epoch-101 with atlas priors | `--prior-source atlas` | Current architecture + A | Dice ≥ R? |
 | 2 | + prior dropout | `--prior-dropout 0.3` | Add B | Dice ≥ step 1? |
-| 3 | + conf input/gate + output fusion | `--conf-gating --output-fusion` (new) | Add C + E | Beat atlas-only (0.44–0.48)? |
+| 3 | + conf input/gate + output fusion | `--conf-gating --output-fusion` (new) | Add C + E | Beat the atlas-only vote (0.392 on the full validation set)? |
 | 4 | + voxel-level prior | `--voxel-prior` | Add D | Per-organ Dice on small organs? |
 | 5 | + atlas-consistency loss | `--consistency-weight 0.1` | Add F (Exp 2) | Dice gain? |
 | 6 | Sensitivity: shift priors | `--shift-prior 5` (mm) | Diagnostic | Is registration tuning worth it? |
+| 7 | **Prior-channel ablation**: P, P+D, P+D+w | `--prior-channels P`, `PD`, `PDw` (new) | Do D and w earn their place? | See below |
+| 8 | + HU-consistency loss | `--hu-weight 0.03` | Add G (Exp 3) | Dice gain over the best of steps 2 to 7? |
+| 9 | + edge-aware loss | `--edge-weight 50` | Add G (Exp 4) | Dice gain over step 8 (or step 7 if 8 is dropped)? |
+| 10 | Swin UNETR + prior | `--backbone swin` | Backbone ablation, cell B (see below) | Beats the UNETR + prior run by more than the seed spread? |
+| 11 | UNETR, image only | `--image-only` | Ablation cell C | Reference for the prior's effect on UNETR |
+| 12 | Swin UNETR, image only | `--backbone swin --image-only` | Ablation cell D | Reference for the prior's effect on Swin |
+
+### Prior-channel ablation (step 7): P vs P+D vs P+D+w
+
+**Why.** P, D and w are all computed from the same 10 atlas votes: D is the distance to the region where P is high (`P_c >= 0.5 * max P_c`), and w is one minus the normalised entropy of P. They add no new information, only different views of it, so each of D and w has to justify the extra inputs and code.
+
+| Arm | Channels the model receives | Used by the model |
+|---|---|---|
+| P | 13 | token MLP and voxel path take P only; the output-fusion term and the consistency loss use w = 1 everywhere |
+| P+D | 13 + 12 | as above, plus D |
+| P+D+w | 13 + 12 + 1 | the full redesign: w as an input, an output mask and a loss weight |
+
+**Implementation.** `--prior-channels` builds the model with only those input channels (the token MLP width and the voxel-path width adapt). Channels are removed, not zeroed, so a dead input cannot influence the arm. Everything else is identical across arms.
+
+**Protocol.** Run it on the best configuration from steps 2 to 5, with the same chunk, epochs, seed and validation set for every arm. Repeat the P+D+w arm with a second seed to measure the seed-to-seed spread. **Keep D or w only if it improves mean validation Dice by more than that spread**; otherwise drop it and simplify the model. Report mean Dice, per-organ Dice (small organs 4, 11, 12 in particular), and the atlas-only vote as the reference.
+
+**Cost.** On the laptop, with a ~150-case training chunk, about 3 hours per 50-epoch run, so four runs (three arms plus the extra seed) are about 12 hours. This estimate is extrapolated from the 24-case run, not measured at that size.
+
+## Backbone ablation: UNETR vs Swin UNETR (steps 10 to 12)
+
+**Status (2026-10-28).** The UNETR + prior cell is the 150/50, 100-epoch run in progress (`chunk_150_50_e100`). The other three cells are queued behind it by `scripts/queue_ablation.py` and start automatically.
+
+**Motivation.** The anatomical tokens and the voxel path already give the network global anatomy, so global attention between, say, aorta and liver voxels is not what the backbone has to supply. Organ boundaries and texture are local. Two further reasons to expect Swin to help: the UNETR token grid is only 6x6x6 (16^3 patches), which is coarse for the weakest organs (organs 4, 11, 12), and a hierarchy with local windows is a stronger inductive bias for a from-scratch model on 150 cases. Swin is not cheaper: UNETR attends over 216 tokens, Swin over 110 k at its first level. Its last stage is effectively global (3^3 tokens), so locality is a bias, not a restriction. This is a hypothesis; the runs below test it.
+
+**Design.** 2 x 2 grid, every cell with the same chunk (150 train / 50 val), 100 epochs, seed 0, optimizer type, schedule shape, augmentation, AMP and effective batch 2, and a learning rate tuned per backbone (below), trained from scratch (no pretrained weights for either backbone).
+
+| Cell | Backbone | Prior | Run name | Step |
+|---|---|---|---|---|
+| A | UNETR (ViT, 122.4 M) | P, D, w | `chunk_150_50_e100` | 7 (done by the main run) |
+| B | Swin UNETR | P, D, w | `chunk_150_50_e100_swin_prior` | 10 |
+| C | UNETR | none (`--image-only`) | `chunk_150_50_e100_vit_imageonly` | 11 |
+| D | Swin UNETR | none (`--image-only`) | `chunk_150_50_e100_swin_imageonly` | 12 |
+
+"Image only" feeds uninformative priors (P = 1/13, D = 1, w = 0) in training and validation, so it is the same network with the atlas switched off. Readings: B versus A is the backbone effect with the prior; D versus C is the backbone effect without it; (A - C) versus (B - D) shows whether the prior helps the two backbones equally. All are read against the atlas-only vote on the same 50 cases (0.424).
+
+**Hyperparameters: tuning is deferred to the server (decision 2026-10-28).** The local queue runs both backbones at the default learning rate 2e-4, which was never tuned and may favour UNETR; read the local ablation with that caveat. Learning-rate tuning per backbone is built into the queue (`--tune`, off by default) and is to be run on the server with the whole data. The protocol it implements:
+
+- Grid 5e-5, 1e-4, 2e-4, 4e-4, with the minimum learning rate at LR/20 (the same ratio as 2e-4 → 1e-5), 25 epochs per run, with the full prior setup (`--gamma-init 1.0`).
+- **No selection on the real validation set.** Each tuning run trains on 100 of the 150 training cases and is scored on the other 50 (`--tune-holdout`, fixed shuffle, 27 `s` / 19 `amos` / 4 `img`; checked disjoint from the real 50 validation cases). The score is the mean validation Dice over the last 3 epochs.
+- The best learning rate is used for every cell of that backbone, including the image-only cell (so each backbone's with-prior and image-only runs differ only in the prior). If UNETR's best is not 2e-4, cell A is re-run at the new rate (`chunk_150_50_e100_vit_prior_lr<value>`), and the earlier 2e-4 run stays as a reference.
+- Fixed for both: AdamW, weight decay 1e-4, gradient clip 1.0, warm-up 1 epoch, cosine decay, effective batch 2, prior dropout 0.3, consistency weight 0.1. Weight decay and batch size are **not** tuned.
+- Caveats: a 25-epoch schedule favours higher learning rates than a 100-epoch one, 25 epochs on 100 cases is a noisy proxy (single seed), and a best value at the edge of the grid is logged as such. The image-only cells may have a different optimum than the with-prior ones; they share the with-prior rate on purpose.
+- Cost: 8 tuning runs (4 per backbone) of about 1.2 h each for UNETR, Swin unknown, before the main runs. Total roughly 50 h or more on the laptop; the tuning ranking is logged in `logs/queue_ablation.log` as it completes, so it can be cut short.
+
+**Prior integration for Swin** (`models/swin_atlas.py`, same paths as the ViT model, adapted to Swin's stages):
+
+| Path | UNETR | Swin UNETR |
+|---|---|---|
+| Voxel path | encoder1 sees [CT, P, D, w] | input has 27 channels; patch embedding and encoder1 both see it |
+| Anatomical tokens | 216 tokens cross-attended in all 12 blocks | the same tokens, cross-attended after Swin stages 2, 3, 4 (12^3, 6^3, 3^3 grids) |
+| Trust gate | scalar per block, init 1 | scalar per adapter, init 1 |
+| Output fusion | `z + gamma_c * w * log(P + 1e-3)`, `--gamma-init 1.0` | identical |
+| Consistency loss, prior dropout | KL weight 0.1 ramped over 10 epochs, p = 0.3 | identical |
+
+Stage 1 (24^3 tokens) has no cross-attention (13.8 k queries are costly on a 4 GB card, and the voxel path covers that resolution). Differences that remain between the cells: Swin has a different parameter count, and its voxel prior also enters the patch embedding. The comparison is "each backbone with its best-effort version of the same prior integration", not an identical parameter budget.
+
+**Memory and speed.** The laptop GPU has 4 GB. Before the first Swin run the queue benchmarks, in order, feature size 48, feature size 48 with activation checkpointing, and feature size 24 with checkpointing, and takes the first that fits. The chosen configuration and the measured seconds per epoch are in `logs/queue_ablation.log`. If Swin fits in none, the Swin cells are skipped and logged. Swin epoch time is unmeasured; a UNETR epoch is about 250 s, so the three runs together are at least 21 h if Swin is as fast as UNETR and probably more.
+
+**Caveats.** One seed and 50 validation cases: a gap below about 0.01 is not a result (the seed spread has not been measured; step 7 plans to measure it). The image-only UNETR collapsed at 48 cases (0.06), so cell C may be a weak reference rather than a fair "image-only" ceiling; if Swin learns image-only where UNETR does not, that is itself a finding about inductive bias.
+
+**Decision rule.** Adopt Swin as the main backbone only if B beats A by more than the seed spread and the gain shows on the small organs (4, 5, 11, 12) and not just on large ones, at an epoch time the laptop can afford.
 
 ## Implementation Plan
 
@@ -327,6 +393,8 @@ All runs on the same train/val split, augmentation and 96³ grid. **Heavy runs g
 - Step 4: Small organs improve per-organ Dice.
 - Step 5: Consistency loss adds ≥ 1–2% Dice.
 - Step 6 (diagnostic, read in both directions): if shifting the priors by 5 to 20 mm lowers Dice clearly, the model uses registration detail and further registration tuning is worth its cost; if Dice barely moves, registration precision is not the bottleneck and effort belongs in the architecture (steps 2 to 5) instead.
+
+- Step 7: D and w are kept only if they beat the P-only arm by more than the seed-to-seed spread.
 
 ## References
 

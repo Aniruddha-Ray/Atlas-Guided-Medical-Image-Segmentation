@@ -44,6 +44,7 @@ from monai.utils import set_determinism
 from data.splits import (DEFAULT_CACHE_DIR, DEFAULT_DATA_DIR, attach_atlas_priors, case_name, paired_cases,
                          split_with_atlases_removed)
 from data.transforms import build_transforms
+from training.physics_losses import edge_aware_loss, hu_consistency_loss, spacing_from_affine
 
 IMG_SIZE = (96, 96, 96)
 NUM_CLASSES = 13
@@ -122,16 +123,35 @@ def main():
     p.add_argument("--prior-dropout", type=float, default=0.3)
     p.add_argument("--consistency-weight", type=float, default=0.1)
     p.add_argument("--ramp-epochs", type=int, default=10)
+    # CT-physics regularisers (training/physics_losses.py, model_walkthrough.md 6.3); 0 = off
+    p.add_argument("--hu-weight", type=float, default=0.0, help="weight of the HU-consistency loss (ramped like --consistency-weight)")
+    p.add_argument("--edge-weight", type=float, default=0.0, help="weight of the edge-aware loss (ramped like --consistency-weight)")
+    p.add_argument("--hu-delta", type=float, default=2.0, help="Huber threshold, in units of the organ's HU sigma")
+    p.add_argument("--hu-core-p", type=float, default=0.9, help="atlas core for HU statistics: P_c >= this")
+    p.add_argument("--hu-core-w", type=float, default=0.8, help="atlas core for HU statistics: w >= this")
+    p.add_argument("--hu-min-voxels", type=int, default=50, help="skip an organ whose atlas core is smaller")
+    p.add_argument("--hu-sigma-min", type=float, default=10.0, help="floor on the per-organ HU sigma")
+    p.add_argument("--edge-sigma-vox", type=float, default=1.0, help="Gaussian smoothing of the CT before its gradient")
     p.add_argument("--rotate-range-deg", type=float, default=15.0, help="degrees (the baseline's was radians by mistake)")
     p.add_argument("--conf-gating", action=argparse.BooleanOptionalAction, default=True)
     p.add_argument("--voxel-prior", action=argparse.BooleanOptionalAction, default=True)
     p.add_argument("--output-fusion", action=argparse.BooleanOptionalAction, default=True)
+    p.add_argument("--image-only", action="store_true",
+                   help="baseline: the network only ever sees uninformative priors (P=1/13, D=1, w=0), in training and validation")
+    p.add_argument("--gamma-init", type=float, default=0.0,
+                   help="initial output-fusion weight (all classes): 1.0 starts the network at logits = z + w*log(P), i.e. at the atlas vote")
+    p.add_argument("--backbone", choices=("vit", "swin"), default="vit", help="vit = UNETR (default), swin = Swin UNETR (models/swin_atlas.py)")
+    p.add_argument("--swin-feature-size", type=int, default=48, help="Swin UNETR feature size (multiple of 12; 48 is the published size)")
+    p.add_argument("--swin-checkpoint", action="store_true", help="activation checkpointing in the Swin stages (less memory, slower)")
     p.add_argument("--amp", action="store_true")
     p.add_argument("--num-workers", type=int, default=2)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--limit-train", type=int, default=None)
     p.add_argument("--limit-val", type=int, default=None)
     p.add_argument("--allow-missing", action="store_true")
+    p.add_argument("--tune-holdout", type=int, default=0,
+                   help="hyperparameter tuning: hold N of the TRAINING cases out as the validation set (fixed shuffle) and "
+                        "leave the real validation split untouched, so it is never used to choose settings")
     p.add_argument("--bench", action="store_true", help="time the data pipeline, a few steps and validation; then exit")
     p.add_argument("--resume", default=None, help="checkpoint_last.pth of a previous run of this script")
     args = p.parse_args()
@@ -148,6 +168,12 @@ def main():
     if (miss_t or miss_v) and not (args.allow_missing or args.bench):
         raise SystemExit(f"no registration cache for {len(miss_t)} train / {len(miss_v)} val targets "
                          f"(e.g. {(miss_t + miss_v)[:5]}); run scripts/register_targets.py first")
+    if args.tune_holdout:
+        order = sorted(train_cases, key=lambda c: case_name(c["image"]))
+        random.Random(12345).shuffle(order)
+        if not 0 < args.tune_holdout < len(order):
+            raise SystemExit(f"--tune-holdout {args.tune_holdout} needs 0 < N < {len(order)} training cases")
+        val_cases, train_cases = order[: args.tune_holdout], order[args.tune_holdout:]
     if args.bench:  # timing needs only a few cases
         train_cases, val_cases = train_cases[:4], val_cases[:2]
     train_cases, val_cases = train_cases[: args.limit_train], val_cases[: args.limit_val]
@@ -183,13 +209,23 @@ def main():
                               persistent_workers=workers > 0)
     val_loader = DataLoader(val_ds, batch_size=1, shuffle=False, num_workers=workers, persistent_workers=workers > 0)
 
-    model = AtlasAwareViTUNETR(**MODEL_KW, conf_gating=args.conf_gating, voxel_prior=args.voxel_prior,
-                               output_fusion=args.output_fusion).to(device)
+    if args.backbone == "swin":
+        from models.swin_atlas import AtlasAwareSwinUNETR
+        model = AtlasAwareSwinUNETR(MODEL_KW["in_channels"], MODEL_KW["out_channels"], IMG_SIZE,
+                                    feature_size=args.swin_feature_size, hidden_size=MODEL_KW["hidden_size"],
+                                    conf_gating=args.conf_gating, voxel_prior=args.voxel_prior,
+                                    output_fusion=args.output_fusion, use_checkpoint=args.swin_checkpoint).to(device)
+    else:
+        model = AtlasAwareViTUNETR(**MODEL_KW, conf_gating=args.conf_gating, voxel_prior=args.voxel_prior,
+                                   output_fusion=args.output_fusion).to(device)
+    if args.gamma_init != 0.0 and args.output_fusion:
+        with torch.no_grad():
+            model.output_fusion_weight.fill_(args.gamma_init)
     n_params = sum(q.numel() for q in model.parameters())
     criterion = DiceCELoss(to_onehot_y=False, softmax=True)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     scaler = torch.amp.GradScaler("cuda", enabled=amp, init_scale=2.0 ** 12)
-    dropper = PriorDropoutd(args.prior_dropout) if args.prior_dropout > 0 else None
+    dropper = PriorDropoutd(args.prior_dropout) if args.prior_dropout > 0 and not args.image_only else None
     if dropper is not None:
         dropper.set_random_state(seed=args.seed)
 
@@ -218,9 +254,17 @@ def main():
     def autocast():
         return torch.autocast(device_type=device.type, dtype=torch.float16, enabled=amp)
 
-    def forward_loss(batch, lam):
+    zero = torch.zeros((), device=device)
+    physics_state = {"logged": False}
+
+    def forward_loss(batch, lam, hu_w=0.0, edge_w=0.0):
+        spacing = spacing_from_affine(batch["image"])
         img, lab = batch["image"].to(device), batch["label"].to(device)
         prob, dist, conf = (batch[k].to(device) for k in ("prob", "dist", "conf"))
+        if args.image_only:
+            prob, dist, conf = torch.full_like(prob, 1.0 / NUM_CLASSES), torch.ones_like(dist), torch.zeros_like(conf)
+        # The HU statistics are not a network input, so they use the priors before prior dropout.
+        prob_raw, conf_raw = (prob.clone(), conf.clone()) if hu_w > 0 else (prob, conf)
         if dropper is not None:
             for i in range(prob.shape[0]):
                 s = dropper({"prob": prob[i], "dist": dist[i], "conf": conf[i]})
@@ -228,12 +272,25 @@ def main():
         with autocast():
             logits = model(img, prob, dist, conf)
         sup = criterion(logits.float(), lab)
-        cons = atlas_consistency_loss(logits, prob, conf) if lam > 0 else torch.zeros((), device=device)
-        return sup, cons
+        cons = atlas_consistency_loss(logits, prob, conf) if lam > 0 else zero
+        hu, n_hu = zero, 0
+        if hu_w > 0:
+            hu, n_hu = hu_consistency_loss(logits, img, prob_raw, conf_raw, delta=args.hu_delta, core_p=args.hu_core_p,
+                                           core_w=args.hu_core_w, min_voxels=args.hu_min_voxels,
+                                           sigma_min=args.hu_sigma_min)
+        edge = edge_aware_loss(logits, img, spacing, sigma_vox=args.edge_sigma_vox) if edge_w > 0 else zero
+        if (hu_w > 0 or edge_w > 0) and not physics_state["logged"]:
+            log(f"physics losses: first-batch voxel spacing {[round(float(s), 3) for s in spacing[0]]} mm, "
+                f"HU organs used {n_hu}, HU loss {float(hu):.4f}, edge loss {float(edge):.4f}")
+            physics_state["logged"] = True
+        return sup, cons, hu, edge, n_hu
+
+    def total_loss(sup, cons, hu, edge, lam, hu_w=0.0, edge_w=0.0):
+        return sup + lam * cons + hu_w * hu + edge_w * edge
 
     if args.bench:
-        return bench(args, log, device, model, train_ds, val_loader, forward_loss, scaler, optimizer, amp, v2_validate,
-                     train_loader)
+        return bench(args, log, device, model, train_ds, val_loader, forward_loss, total_loss, scaler, optimizer, amp,
+                     v2_validate, train_loader)
 
     ref = atlas_vote_dice(val_loader)
     log(f"reference: atlas-only majority vote on the validation chunk (96^3 grid): Dice {ref:.4f}")
@@ -243,7 +300,9 @@ def main():
     if new_file:
         with open(csv_path, "w", newline="", encoding="utf-8") as f:
             csv.writer(f).writerow(["epoch", "lr", "lambda", "train_dice_ce", "train_kl", "val_dice", "val_dice_no_prior",
-                                    "gate_mean", "gamma_mean"] + [f"o{k}" for k in ORGAN_IDS] + ["epoch_s", "skipped_steps"])
+                                    "gate_mean", "gamma_mean"] + [f"o{k}" for k in ORGAN_IDS] + ["epoch_s", "skipped_steps",
+                                                                                                  "train_hu", "train_edge",
+                                                                                                  "hu_organs_per_sample"])
     start_epoch, best = 1, {"epoch": 0, "val_dice": -1.0}
     if args.resume:
         ck = torch.load(args.resume, map_location=device, weights_only=False)
@@ -257,14 +316,19 @@ def main():
         t0 = time.time()
         model.train()
         lam = consistency_lambda(epoch - 1, args.consistency_weight, args.ramp_epochs)
-        sup_sum = kl_sum = 0.0
+        # physics terms judge the prediction, which is meaningless at the start: same ramp as the consistency term
+        hu_w = consistency_lambda(epoch - 1, args.hu_weight, args.ramp_epochs)
+        edge_w = consistency_lambda(epoch - 1, args.edge_weight, args.ramp_epochs)
+        sup_sum = kl_sum = hu_sum = edge_sum = 0.0
+        hu_organs = 0
         skipped = 0
         optimizer.zero_grad(set_to_none=True)
         for i, batch in enumerate(train_loader):
             group = min(args.accum, n_micro - (i // args.accum) * args.accum)
-            sup, cons = forward_loss(batch, lam)
-            scaler.scale((sup + lam * cons) / group).backward()
-            sup_sum += sup.item(); kl_sum += cons.item()
+            sup, cons, hu, edge, n_hu = forward_loss(batch, lam, hu_w, edge_w)
+            scaler.scale(total_loss(sup, cons, hu, edge, lam, hu_w, edge_w) / group).backward()
+            sup_sum += sup.item(); kl_sum += cons.item(); hu_sum += float(hu); edge_sum += float(edge)
+            hu_organs += n_hu
             if (i + 1) % args.accum == 0 or i == n_micro - 1:
                 scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
@@ -273,7 +337,7 @@ def main():
                 skipped += int(scaler.get_scale() < before)
                 optimizer.zero_grad(set_to_none=True)
                 sched.step()
-        val, per = v2_validate(model, val_loader, device, amp=amp)
+        val, per = v2_validate(model, without_prior(val_loader) if args.image_only else val_loader, device, amp=amp)
         val_np = None
         if epoch % 5 == 0 or epoch == args.epochs:
             val_np, _ = v2_validate(model, without_prior(val_loader), device, amp=amp)
@@ -284,8 +348,12 @@ def main():
         with open(csv_path, "a", newline="", encoding="utf-8") as f:
             csv.writer(f).writerow([epoch, optimizer.param_groups[0]["lr"], lam, sup_sum / n_micro, kl_sum / n_micro, val,
                                     val_np if val_np is not None else "", gate, gamma]
-                                   + [("" if s is None else round(s, 4)) for s in per] + [round(secs, 1), skipped])
+                                   + [("" if s is None else round(s, 4)) for s in per] + [round(secs, 1), skipped]
+                                   + [hu_sum / n_micro, edge_sum / n_micro, hu_organs / max(n_micro * args.micro_batch, 1)])
         extra = f" | no-prior Dice {val_np:.4f}" if val_np is not None else ""
+        if args.hu_weight > 0 or args.edge_weight > 0:
+            extra += (f" | HU {hu_sum / n_micro:.3f} (x{hu_w:.4f}, {hu_organs / max(n_micro * args.micro_batch, 1):.1f} "
+                      f"organs/sample) edge {edge_sum / n_micro:.4f} (x{edge_w:.4f})")
         epoch_times.append(secs)
         steady = epoch_times[1:] or epoch_times  # epoch 1 also builds the sample cache
         eta_h = (args.epochs - epoch) * float(np.mean(steady[-5:])) / 3600
@@ -306,7 +374,8 @@ def main():
         f"(atlas-only reference {ref:.4f})")
 
 
-def bench(args, log, device, model, train_ds, val_loader, forward_loss, scaler, optimizer, amp, v2_validate, train_loader):
+def bench(args, log, device, model, train_ds, val_loader, forward_loss, total_loss, scaler, optimizer, amp, v2_validate,
+          train_loader):
     n = len(train_ds)
     log(f"--- bench: {n} cached train cases, {len(val_loader)} cached val cases ---")
     t0 = time.time()
@@ -327,8 +396,8 @@ def bench(args, log, device, model, train_ds, val_loader, forward_loss, scaler, 
     for _ in range(3):
         for batch in train_loader:
             torch.cuda.synchronize(); t = time.time()
-            sup, cons = forward_loss(batch, 0.1)
-            scaler.scale(sup + 0.1 * cons).backward()
+            sup, cons, hu, edge, _ = forward_loss(batch, 0.1, args.hu_weight, args.edge_weight)
+            scaler.scale(total_loss(sup, cons, hu, edge, 0.1, args.hu_weight, args.edge_weight)).backward()
             scaler.unscale_(optimizer); scaler.step(optimizer); scaler.update(); optimizer.zero_grad(set_to_none=True)
             torch.cuda.synchronize(); times.append(time.time() - t)
     step_s, peak = float(np.mean(times[1:] or times)), torch.cuda.max_memory_allocated() / 2**30

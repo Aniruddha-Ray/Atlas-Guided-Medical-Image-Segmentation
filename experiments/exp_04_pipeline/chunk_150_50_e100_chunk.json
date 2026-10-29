@@ -1,0 +1,1142 @@
+{
+  "seed": 0,
+  "min_organ_ml": 1.0,
+  "train_quota": "amos=60,img=6,s=84",
+  "val_quota": "amos=22,img=2,s=26",
+  "train": [
+    "amos_0077",
+    "amos_0388",
+    "amos_0188",
+    "amos_0307",
+    "amos_0083",
+    "amos_0370",
+    "amos_0377",
+    "amos_0310",
+    "amos_0387",
+    "amos_0281",
+    "amos_0029",
+    "amos_0374",
+    "amos_0089",
+    "amos_0330",
+    "amos_0105",
+    "amos_0045",
+    "amos_0200",
+    "amos_0296",
+    "amos_0085",
+    "amos_0381",
+    "amos_0078",
+    "amos_0320",
+    "amos_0257",
+    "amos_0217",
+    "amos_0194",
+    "amos_0290",
+    "amos_0054",
+    "amos_0127",
+    "amos_0361",
+    "amos_0049",
+    "amos_0371",
+    "amos_0180",
+    "amos_0126",
+    "amos_0072",
+    "amos_0036",
+    "amos_0325",
+    "amos_0174",
+    "amos_0198",
+    "amos_0365",
+    "amos_0283",
+    "amos_0013",
+    "amos_0250",
+    "amos_0138",
+    "amos_0087",
+    "amos_0391",
+    "amos_0023",
+    "amos_0185",
+    "amos_0258",
+    "amos_0162",
+    "amos_0216",
+    "amos_0219",
+    "amos_0004",
+    "amos_0108",
+    "amos_0284",
+    "amos_0288",
+    "amos_0399",
+    "amos_0119",
+    "amos_0357",
+    "amos_0372",
+    "amos_0177",
+    "img0021",
+    "img0033",
+    "img0030",
+    "img0037",
+    "img0029",
+    "img0006",
+    "s0556",
+    "s0059",
+    "s1209",
+    "s0842",
+    "s0174",
+    "s0770",
+    "s0602",
+    "s1099",
+    "s0029",
+    "s0193",
+    "s0236",
+    "s1336",
+    "s0790",
+    "s0498",
+    "s1415",
+    "s0749",
+    "s0664",
+    "s0139",
+    "s1329",
+    "s0247",
+    "s0551",
+    "s0190",
+    "s1046",
+    "s0916",
+    "s0078",
+    "s0275",
+    "s0339",
+    "s0394",
+    "s0232",
+    "s0042",
+    "s0293",
+    "s1212",
+    "s0913",
+    "s0560",
+    "s0961",
+    "s1307",
+    "s0461",
+    "s1304",
+    "s1189",
+    "s0612",
+    "s0157",
+    "s0709",
+    "s0441",
+    "s0500",
+    "s0456",
+    "s0472",
+    "s1006",
+    "s0566",
+    "s0657",
+    "s0511",
+    "s0970",
+    "s1297",
+    "s0923",
+    "s0686",
+    "s0550",
+    "s0344",
+    "s1249",
+    "s0983",
+    "s0617",
+    "s0477",
+    "s1206",
+    "s0168",
+    "s1090",
+    "s0476",
+    "s0625",
+    "s0994",
+    "s1031",
+    "s1424",
+    "s0513",
+    "s0965",
+    "s0286",
+    "s0423",
+    "s0801",
+    "s0623",
+    "s0662",
+    "s0694",
+    "s1024",
+    "s1085",
+    "s0541",
+    "s0052",
+    "s1161",
+    "s0334",
+    "s0486",
+    "s0982"
+  ],
+  "val": [
+    "amos_0098",
+    "amos_0237",
+    "amos_0206",
+    "amos_0248",
+    "amos_0336",
+    "amos_0332",
+    "amos_0348",
+    "amos_0042",
+    "amos_0063",
+    "amos_0362",
+    "amos_0410",
+    "amos_0409",
+    "amos_0152",
+    "amos_0186",
+    "amos_0204",
+    "amos_0385",
+    "amos_0006",
+    "amos_0009",
+    "amos_0309",
+    "amos_0278",
+    "amos_0106",
+    "amos_0117",
+    "img0005",
+    "img0002",
+    "s0548",
+    "s1120",
+    "s0574",
+    "s0703",
+    "s0502",
+    "s0667",
+    "s1273",
+    "s0075",
+    "s0992",
+    "s0458",
+    "s0728",
+    "s0933",
+    "s1255",
+    "s1159",
+    "s0150",
+    "s0252",
+    "s1285",
+    "s0959",
+    "s1063",
+    "s0319",
+    "s1086",
+    "s1123",
+    "s1291",
+    "s1061",
+    "s0483",
+    "s0212"
+  ],
+  "need_registration": [
+    "amos_0381",
+    "amos_0078",
+    "amos_0320",
+    "amos_0257",
+    "amos_0217",
+    "amos_0194",
+    "amos_0290",
+    "amos_0054",
+    "amos_0127",
+    "amos_0361",
+    "amos_0049",
+    "amos_0371",
+    "amos_0180",
+    "amos_0126",
+    "amos_0072",
+    "amos_0036",
+    "amos_0325",
+    "amos_0174",
+    "amos_0198",
+    "amos_0365",
+    "amos_0283",
+    "amos_0013",
+    "amos_0250",
+    "amos_0138",
+    "amos_0087",
+    "amos_0391",
+    "amos_0023",
+    "amos_0185",
+    "amos_0258",
+    "amos_0162",
+    "amos_0216",
+    "amos_0219",
+    "amos_0004",
+    "amos_0108",
+    "amos_0284",
+    "amos_0288",
+    "amos_0399",
+    "amos_0119",
+    "amos_0357",
+    "amos_0372",
+    "amos_0177",
+    "img0030",
+    "img0037",
+    "img0029",
+    "img0006",
+    "s0394",
+    "s0232",
+    "s0042",
+    "s0293",
+    "s1212",
+    "s0913",
+    "s0560",
+    "s0961",
+    "s1307",
+    "s0461",
+    "s1304",
+    "s1189",
+    "s0612",
+    "s0157",
+    "s0709",
+    "s0441",
+    "s0500",
+    "s0456",
+    "s0472",
+    "s1006",
+    "s0566",
+    "s0657",
+    "s0511",
+    "s0970",
+    "s1297",
+    "s0923",
+    "s0686",
+    "s0550",
+    "s0344",
+    "s1249",
+    "s0983",
+    "s0617",
+    "s0477",
+    "s1206",
+    "s0168",
+    "s1090",
+    "s0476",
+    "s0625",
+    "s0994",
+    "s1031",
+    "s1424",
+    "s0513",
+    "s0965",
+    "s0286",
+    "s0423",
+    "s0801",
+    "s0623",
+    "s0662",
+    "s0694",
+    "s1024",
+    "s1085",
+    "s0541",
+    "s0052",
+    "s1161",
+    "s0334",
+    "s0486",
+    "s0982",
+    "amos_0410",
+    "amos_0409",
+    "amos_0152",
+    "amos_0186",
+    "amos_0204",
+    "amos_0385",
+    "amos_0006",
+    "amos_0009",
+    "amos_0309",
+    "amos_0278",
+    "amos_0106",
+    "amos_0117",
+    "img0002",
+    "s1159",
+    "s0150",
+    "s0252",
+    "s1285",
+    "s0959",
+    "s1063",
+    "s0319",
+    "s1086",
+    "s1123",
+    "s1291",
+    "s1061",
+    "s0483",
+    "s0212"
+  ],
+  "details": {
+    "amos_0077": {
+      "source": "amos",
+      "min_organ_ml": 3.94
+    },
+    "amos_0388": {
+      "source": "amos",
+      "min_organ_ml": 2.53
+    },
+    "amos_0188": {
+      "source": "amos",
+      "min_organ_ml": 2.68
+    },
+    "amos_0307": {
+      "source": "amos",
+      "min_organ_ml": 5.89
+    },
+    "amos_0083": {
+      "source": "amos",
+      "min_organ_ml": 4.51
+    },
+    "amos_0370": {
+      "source": "amos",
+      "min_organ_ml": 2.71
+    },
+    "amos_0377": {
+      "source": "amos",
+      "min_organ_ml": 1.97
+    },
+    "amos_0310": {
+      "source": "amos",
+      "min_organ_ml": 2.82
+    },
+    "amos_0387": {
+      "source": "amos",
+      "min_organ_ml": 2.63
+    },
+    "amos_0281": {
+      "source": "amos",
+      "min_organ_ml": 2.18
+    },
+    "amos_0029": {
+      "source": "amos",
+      "min_organ_ml": 5.64
+    },
+    "amos_0374": {
+      "source": "amos",
+      "min_organ_ml": 1.89
+    },
+    "amos_0089": {
+      "source": "amos",
+      "min_organ_ml": 5.22
+    },
+    "amos_0330": {
+      "source": "amos",
+      "min_organ_ml": 1.21
+    },
+    "amos_0105": {
+      "source": "amos",
+      "min_organ_ml": 4.02
+    },
+    "amos_0045": {
+      "source": "amos",
+      "min_organ_ml": 2.51
+    },
+    "amos_0200": {
+      "source": "amos",
+      "min_organ_ml": 3.62
+    },
+    "amos_0296": {
+      "source": "amos",
+      "min_organ_ml": 3.08
+    },
+    "amos_0085": {
+      "source": "amos",
+      "min_organ_ml": 2.27
+    },
+    "amos_0381": {
+      "source": "amos",
+      "min_organ_ml": 2.87
+    },
+    "amos_0078": {
+      "source": "amos",
+      "min_organ_ml": 3.39
+    },
+    "amos_0320": {
+      "source": "amos",
+      "min_organ_ml": 3.58
+    },
+    "amos_0257": {
+      "source": "amos",
+      "min_organ_ml": 4.52
+    },
+    "amos_0217": {
+      "source": "amos",
+      "min_organ_ml": 1.24
+    },
+    "amos_0194": {
+      "source": "amos",
+      "min_organ_ml": 1.32
+    },
+    "amos_0290": {
+      "source": "amos",
+      "min_organ_ml": 2.75
+    },
+    "amos_0054": {
+      "source": "amos",
+      "min_organ_ml": 2.24
+    },
+    "amos_0127": {
+      "source": "amos",
+      "min_organ_ml": 1.25
+    },
+    "amos_0361": {
+      "source": "amos",
+      "min_organ_ml": 2.19
+    },
+    "amos_0049": {
+      "source": "amos",
+      "min_organ_ml": 1.92
+    },
+    "amos_0371": {
+      "source": "amos",
+      "min_organ_ml": 1.16
+    },
+    "amos_0180": {
+      "source": "amos",
+      "min_organ_ml": 2.68
+    },
+    "amos_0126": {
+      "source": "amos",
+      "min_organ_ml": 1.29
+    },
+    "amos_0072": {
+      "source": "amos",
+      "min_organ_ml": 2.05
+    },
+    "amos_0036": {
+      "source": "amos",
+      "min_organ_ml": 3.27
+    },
+    "amos_0325": {
+      "source": "amos",
+      "min_organ_ml": 2.76
+    },
+    "amos_0174": {
+      "source": "amos",
+      "min_organ_ml": 3.16
+    },
+    "amos_0198": {
+      "source": "amos",
+      "min_organ_ml": 2.38
+    },
+    "amos_0365": {
+      "source": "amos",
+      "min_organ_ml": 2.07
+    },
+    "amos_0283": {
+      "source": "amos",
+      "min_organ_ml": 4.67
+    },
+    "amos_0013": {
+      "source": "amos",
+      "min_organ_ml": 3.53
+    },
+    "amos_0250": {
+      "source": "amos",
+      "min_organ_ml": 4.15
+    },
+    "amos_0138": {
+      "source": "amos",
+      "min_organ_ml": 3.21
+    },
+    "amos_0087": {
+      "source": "amos",
+      "min_organ_ml": 2.01
+    },
+    "amos_0391": {
+      "source": "amos",
+      "min_organ_ml": 3.16
+    },
+    "amos_0023": {
+      "source": "amos",
+      "min_organ_ml": 2.13
+    },
+    "amos_0185": {
+      "source": "amos",
+      "min_organ_ml": 3.62
+    },
+    "amos_0258": {
+      "source": "amos",
+      "min_organ_ml": 3.31
+    },
+    "amos_0162": {
+      "source": "amos",
+      "min_organ_ml": 2.85
+    },
+    "amos_0216": {
+      "source": "amos",
+      "min_organ_ml": 2.58
+    },
+    "amos_0219": {
+      "source": "amos",
+      "min_organ_ml": 2.67
+    },
+    "amos_0004": {
+      "source": "amos",
+      "min_organ_ml": 2.06
+    },
+    "amos_0108": {
+      "source": "amos",
+      "min_organ_ml": 2.64
+    },
+    "amos_0284": {
+      "source": "amos",
+      "min_organ_ml": 3.25
+    },
+    "amos_0288": {
+      "source": "amos",
+      "min_organ_ml": 4.96
+    },
+    "amos_0399": {
+      "source": "amos",
+      "min_organ_ml": 2.05
+    },
+    "amos_0119": {
+      "source": "amos",
+      "min_organ_ml": 3.34
+    },
+    "amos_0357": {
+      "source": "amos",
+      "min_organ_ml": 2.74
+    },
+    "amos_0372": {
+      "source": "amos",
+      "min_organ_ml": 3.23
+    },
+    "amos_0177": {
+      "source": "amos",
+      "min_organ_ml": 3.01
+    },
+    "img0021": {
+      "source": "img",
+      "min_organ_ml": 1.02
+    },
+    "img0033": {
+      "source": "img",
+      "min_organ_ml": 4.58
+    },
+    "img0030": {
+      "source": "img",
+      "min_organ_ml": 3.61
+    },
+    "img0037": {
+      "source": "img",
+      "min_organ_ml": 3.8
+    },
+    "img0029": {
+      "source": "img",
+      "min_organ_ml": 3.99
+    },
+    "img0006": {
+      "source": "img",
+      "min_organ_ml": 1.97
+    },
+    "s0556": {
+      "source": "s",
+      "min_organ_ml": 5.05
+    },
+    "s0059": {
+      "source": "s",
+      "min_organ_ml": 3.13
+    },
+    "s1209": {
+      "source": "s",
+      "min_organ_ml": 4.33
+    },
+    "s0842": {
+      "source": "s",
+      "min_organ_ml": 3.5
+    },
+    "s0174": {
+      "source": "s",
+      "min_organ_ml": 2.8
+    },
+    "s0770": {
+      "source": "s",
+      "min_organ_ml": 4.03
+    },
+    "s0602": {
+      "source": "s",
+      "min_organ_ml": 4.15
+    },
+    "s1099": {
+      "source": "s",
+      "min_organ_ml": 1.8
+    },
+    "s0029": {
+      "source": "s",
+      "min_organ_ml": 3.78
+    },
+    "s0193": {
+      "source": "s",
+      "min_organ_ml": 4.77
+    },
+    "s0236": {
+      "source": "s",
+      "min_organ_ml": 4.94
+    },
+    "s1336": {
+      "source": "s",
+      "min_organ_ml": 4.61
+    },
+    "s0790": {
+      "source": "s",
+      "min_organ_ml": 2.0
+    },
+    "s0498": {
+      "source": "s",
+      "min_organ_ml": 4.82
+    },
+    "s1415": {
+      "source": "s",
+      "min_organ_ml": 6.48
+    },
+    "s0749": {
+      "source": "s",
+      "min_organ_ml": 5.36
+    },
+    "s0664": {
+      "source": "s",
+      "min_organ_ml": 1.17
+    },
+    "s0139": {
+      "source": "s",
+      "min_organ_ml": 1.63
+    },
+    "s1329": {
+      "source": "s",
+      "min_organ_ml": 2.76
+    },
+    "s0247": {
+      "source": "s",
+      "min_organ_ml": 2.98
+    },
+    "s0551": {
+      "source": "s",
+      "min_organ_ml": 2.71
+    },
+    "s0190": {
+      "source": "s",
+      "min_organ_ml": 1.6
+    },
+    "s1046": {
+      "source": "s",
+      "min_organ_ml": 3.16
+    },
+    "s0916": {
+      "source": "s",
+      "min_organ_ml": 2.41
+    },
+    "s0078": {
+      "source": "s",
+      "min_organ_ml": 5.08
+    },
+    "s0275": {
+      "source": "s",
+      "min_organ_ml": 5.09
+    },
+    "s0339": {
+      "source": "s",
+      "min_organ_ml": 3.02
+    },
+    "s0394": {
+      "source": "s",
+      "min_organ_ml": 4.65
+    },
+    "s0232": {
+      "source": "s",
+      "min_organ_ml": 4.76
+    },
+    "s0042": {
+      "source": "s",
+      "min_organ_ml": 5.36
+    },
+    "s0293": {
+      "source": "s",
+      "min_organ_ml": 5.9
+    },
+    "s1212": {
+      "source": "s",
+      "min_organ_ml": 2.51
+    },
+    "s0913": {
+      "source": "s",
+      "min_organ_ml": 3.12
+    },
+    "s0560": {
+      "source": "s",
+      "min_organ_ml": 1.37
+    },
+    "s0961": {
+      "source": "s",
+      "min_organ_ml": 3.52
+    },
+    "s1307": {
+      "source": "s",
+      "min_organ_ml": 6.03
+    },
+    "s0461": {
+      "source": "s",
+      "min_organ_ml": 3.8
+    },
+    "s1304": {
+      "source": "s",
+      "min_organ_ml": 9.09
+    },
+    "s1189": {
+      "source": "s",
+      "min_organ_ml": 1.32
+    },
+    "s0612": {
+      "source": "s",
+      "min_organ_ml": 4.33
+    },
+    "s0157": {
+      "source": "s",
+      "min_organ_ml": 2.39
+    },
+    "s0709": {
+      "source": "s",
+      "min_organ_ml": 3.18
+    },
+    "s0441": {
+      "source": "s",
+      "min_organ_ml": 4.05
+    },
+    "s0500": {
+      "source": "s",
+      "min_organ_ml": 6.19
+    },
+    "s0456": {
+      "source": "s",
+      "min_organ_ml": 1.96
+    },
+    "s0472": {
+      "source": "s",
+      "min_organ_ml": 3.06
+    },
+    "s1006": {
+      "source": "s",
+      "min_organ_ml": 3.91
+    },
+    "s0566": {
+      "source": "s",
+      "min_organ_ml": 3.26
+    },
+    "s0657": {
+      "source": "s",
+      "min_organ_ml": 4.5
+    },
+    "s0511": {
+      "source": "s",
+      "min_organ_ml": 3.85
+    },
+    "s0970": {
+      "source": "s",
+      "min_organ_ml": 2.06
+    },
+    "s1297": {
+      "source": "s",
+      "min_organ_ml": 3.54
+    },
+    "s0923": {
+      "source": "s",
+      "min_organ_ml": 1.85
+    },
+    "s0686": {
+      "source": "s",
+      "min_organ_ml": 4.77
+    },
+    "s0550": {
+      "source": "s",
+      "min_organ_ml": 3.65
+    },
+    "s0344": {
+      "source": "s",
+      "min_organ_ml": 3.71
+    },
+    "s1249": {
+      "source": "s",
+      "min_organ_ml": 5.23
+    },
+    "s0983": {
+      "source": "s",
+      "min_organ_ml": 3.56
+    },
+    "s0617": {
+      "source": "s",
+      "min_organ_ml": 2.98
+    },
+    "s0477": {
+      "source": "s",
+      "min_organ_ml": 4.37
+    },
+    "s1206": {
+      "source": "s",
+      "min_organ_ml": 3.0
+    },
+    "s0168": {
+      "source": "s",
+      "min_organ_ml": 2.7
+    },
+    "s1090": {
+      "source": "s",
+      "min_organ_ml": 3.52
+    },
+    "s0476": {
+      "source": "s",
+      "min_organ_ml": 1.57
+    },
+    "s0625": {
+      "source": "s",
+      "min_organ_ml": 4.99
+    },
+    "s0994": {
+      "source": "s",
+      "min_organ_ml": 7.14
+    },
+    "s1031": {
+      "source": "s",
+      "min_organ_ml": 3.08
+    },
+    "s1424": {
+      "source": "s",
+      "min_organ_ml": 3.16
+    },
+    "s0513": {
+      "source": "s",
+      "min_organ_ml": 1.45
+    },
+    "s0965": {
+      "source": "s",
+      "min_organ_ml": 2.02
+    },
+    "s0286": {
+      "source": "s",
+      "min_organ_ml": 4.78
+    },
+    "s0423": {
+      "source": "s",
+      "min_organ_ml": 3.81
+    },
+    "s0801": {
+      "source": "s",
+      "min_organ_ml": 4.07
+    },
+    "s0623": {
+      "source": "s",
+      "min_organ_ml": 1.62
+    },
+    "s0662": {
+      "source": "s",
+      "min_organ_ml": 4.62
+    },
+    "s0694": {
+      "source": "s",
+      "min_organ_ml": 3.38
+    },
+    "s1024": {
+      "source": "s",
+      "min_organ_ml": 5.13
+    },
+    "s1085": {
+      "source": "s",
+      "min_organ_ml": 4.21
+    },
+    "s0541": {
+      "source": "s",
+      "min_organ_ml": 6.55
+    },
+    "s0052": {
+      "source": "s",
+      "min_organ_ml": 3.67
+    },
+    "s1161": {
+      "source": "s",
+      "min_organ_ml": 7.24
+    },
+    "s0334": {
+      "source": "s",
+      "min_organ_ml": 6.32
+    },
+    "s0486": {
+      "source": "s",
+      "min_organ_ml": 5.57
+    },
+    "s0982": {
+      "source": "s",
+      "min_organ_ml": 2.56
+    },
+    "amos_0098": {
+      "source": "amos",
+      "min_organ_ml": 4.12
+    },
+    "amos_0237": {
+      "source": "amos",
+      "min_organ_ml": 4.49
+    },
+    "amos_0206": {
+      "source": "amos",
+      "min_organ_ml": 5.2
+    },
+    "amos_0248": {
+      "source": "amos",
+      "min_organ_ml": 3.03
+    },
+    "amos_0336": {
+      "source": "amos",
+      "min_organ_ml": 3.86
+    },
+    "amos_0332": {
+      "source": "amos",
+      "min_organ_ml": 3.3
+    },
+    "amos_0348": {
+      "source": "amos",
+      "min_organ_ml": 3.54
+    },
+    "amos_0042": {
+      "source": "amos",
+      "min_organ_ml": 4.93
+    },
+    "amos_0063": {
+      "source": "amos",
+      "min_organ_ml": 2.75
+    },
+    "amos_0362": {
+      "source": "amos",
+      "min_organ_ml": 5.52
+    },
+    "amos_0410": {
+      "source": "amos",
+      "min_organ_ml": 6.09
+    },
+    "amos_0409": {
+      "source": "amos",
+      "min_organ_ml": 2.65
+    },
+    "amos_0152": {
+      "source": "amos",
+      "min_organ_ml": 3.03
+    },
+    "amos_0186": {
+      "source": "amos",
+      "min_organ_ml": 1.86
+    },
+    "amos_0204": {
+      "source": "amos",
+      "min_organ_ml": 2.93
+    },
+    "amos_0385": {
+      "source": "amos",
+      "min_organ_ml": 3.37
+    },
+    "amos_0006": {
+      "source": "amos",
+      "min_organ_ml": 2.98
+    },
+    "amos_0009": {
+      "source": "amos",
+      "min_organ_ml": 7.67
+    },
+    "amos_0309": {
+      "source": "amos",
+      "min_organ_ml": 2.57
+    },
+    "amos_0278": {
+      "source": "amos",
+      "min_organ_ml": 5.25
+    },
+    "amos_0106": {
+      "source": "amos",
+      "min_organ_ml": 1.01
+    },
+    "amos_0117": {
+      "source": "amos",
+      "min_organ_ml": 2.39
+    },
+    "img0005": {
+      "source": "img",
+      "min_organ_ml": 6.96
+    },
+    "img0002": {
+      "source": "img",
+      "min_organ_ml": 4.94
+    },
+    "s0548": {
+      "source": "s",
+      "min_organ_ml": 7.39
+    },
+    "s1120": {
+      "source": "s",
+      "min_organ_ml": 2.48
+    },
+    "s0574": {
+      "source": "s",
+      "min_organ_ml": 4.32
+    },
+    "s0703": {
+      "source": "s",
+      "min_organ_ml": 3.08
+    },
+    "s0502": {
+      "source": "s",
+      "min_organ_ml": 4.46
+    },
+    "s0667": {
+      "source": "s",
+      "min_organ_ml": 3.62
+    },
+    "s1273": {
+      "source": "s",
+      "min_organ_ml": 5.33
+    },
+    "s0075": {
+      "source": "s",
+      "min_organ_ml": 3.98
+    },
+    "s0992": {
+      "source": "s",
+      "min_organ_ml": 3.03
+    },
+    "s0458": {
+      "source": "s",
+      "min_organ_ml": 4.65
+    },
+    "s0728": {
+      "source": "s",
+      "min_organ_ml": 1.73
+    },
+    "s0933": {
+      "source": "s",
+      "min_organ_ml": 4.05
+    },
+    "s1255": {
+      "source": "s",
+      "min_organ_ml": 4.27
+    },
+    "s1159": {
+      "source": "s",
+      "min_organ_ml": 2.08
+    },
+    "s0150": {
+      "source": "s",
+      "min_organ_ml": 4.78
+    },
+    "s0252": {
+      "source": "s",
+      "min_organ_ml": 2.23
+    },
+    "s1285": {
+      "source": "s",
+      "min_organ_ml": 2.81
+    },
+    "s0959": {
+      "source": "s",
+      "min_organ_ml": 2.56
+    },
+    "s1063": {
+      "source": "s",
+      "min_organ_ml": 1.41
+    },
+    "s0319": {
+      "source": "s",
+      "min_organ_ml": 6.67
+    },
+    "s1086": {
+      "source": "s",
+      "min_organ_ml": 4.98
+    },
+    "s1123": {
+      "source": "s",
+      "min_organ_ml": 4.83
+    },
+    "s1291": {
+      "source": "s",
+      "min_organ_ml": 2.12
+    },
+    "s1061": {
+      "source": "s",
+      "min_organ_ml": 3.27
+    },
+    "s0483": {
+      "source": "s",
+      "min_organ_ml": 3.18
+    },
+    "s0212": {
+      "source": "s",
+      "min_organ_ml": 6.83
+    }
+  }
+}
