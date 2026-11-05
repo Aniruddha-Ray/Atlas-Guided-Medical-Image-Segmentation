@@ -224,7 +224,11 @@ class Pipeline:
         if not os.path.exists(metrics):
             self.log("[report] no metrics.csv yet")
             return
-        rows = list(csv.DictReader(open(metrics, encoding="utf-8")))
+        all_rows = list(csv.DictReader(open(metrics, encoding="utf-8")))
+        rows = [r for r in all_rows if r.get("val_dice")]  # --val-every > 1 leaves epochs without a validation score
+        if not rows:
+            self.log("[report] no validated epoch yet")
+            return
         val = [float(r["val_dice"]) for r in rows]
         best_i = max(range(len(val)), key=val.__getitem__)
         organ_cols = [f"o{k}" for k in range(1, 13)]
@@ -239,13 +243,13 @@ class Pipeline:
             s = json.load(open(vp, encoding="utf-8"))["summary"]
             vote_org = (s.get("val") or s["all"])["per_organ_vote_dice"]
         L = [f"# Run report: {a.experiment}/{a.run_name}", "",
-             f"Epochs completed: {len(rows)} of {a.epochs}"
+             f"Epochs completed: {len(all_rows)} of {a.epochs}"
              + ("" if os.path.exists(summary_p) else " (still running or interrupted)"), ""]
         L += ["| Measure | Value |", "|---|---|",
               f"| Best validation Dice | **{val[best_i]:.4f}** (epoch {rows[best_i]['epoch']}) |",
               f"| Last validation Dice | {val[-1]:.4f} |"]
         if ref is not None:
-            L.append(f"| Atlas vote alone, same validation cases (96^3) | {ref:.4f} |")
+            L.append(f"| Atlas vote alone, same validation cases and grid | {ref:.4f} |")
             L.append(f"| Model minus atlas vote (best epoch) | {val[best_i] - ref:+.4f} |")
         if no_prior:
             L.append(f"| Model with the prior removed at evaluation (epoch {no_prior[-1][0]}) | {no_prior[-1][1]:.4f} |")

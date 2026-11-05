@@ -24,6 +24,36 @@ LOG_PRIOR_EPS = 1e-3
 CROSS_ATTN_STAGES = (2, 3, 4)  # indices into the swinViT outputs [x0 (48^3), x1 (24^3), x2 (12^3), x3 (6^3), x4 (3^3)]
 
 
+def load_state_dict_expanding(model, state):
+    """
+    Load a checkpoint into a model that has MORE input channels (e.g. --hu-input): a tensor that differs only in
+    dimension 1 and is larger in the model gets the old weights in its first channels and zeros in the new ones, so the
+    expanded model starts out computing exactly what the checkpoint computed. Tensors absent from the checkpoint keep
+    their fresh initialisation. Returns (names of grown tensors, names missing from the checkpoint); any other shape
+    mismatch or unexpected key raises.
+    """
+    own, new_state, grown, absent = model.state_dict(), {}, [], []
+    n_extra = (model.out.conv.conv.out_channels - 1) if getattr(model, "hu_input", False) else 0  # the HU channels
+    unexpected = [k for k in state if k not in own]
+    if unexpected:
+        raise KeyError(f"checkpoint has tensors the model lacks: {unexpected[:5]}")
+    for k, v in own.items():
+        if k not in state:
+            absent.append(k)
+        elif state[k].shape == v.shape:
+            new_state[k] = state[k]
+        elif v.ndim >= 2 and state[k].shape[0] == v.shape[0] and state[k].shape[2:] == v.shape[2:] \
+                and v.shape[1] - state[k].shape[1] == n_extra > 0:
+            w = torch.zeros_like(v)
+            w[:, : state[k].shape[1]] = state[k]
+            new_state[k] = w
+            grown.append(k)
+        else:
+            raise ValueError(f"{k}: checkpoint {tuple(state[k].shape)} does not fit model {tuple(v.shape)}")
+    model.load_state_dict({**own, **new_state})
+    return grown, absent
+
+
 class PriorTokens(nn.Module):
     """Per-patch average pooling of [P, D, w] followed by an MLP: the same tokens as ConfidencePriorGenerator."""
 
@@ -56,12 +86,16 @@ class GatedCrossAttention(nn.Module):
 
 class AtlasAwareSwinUNETR(SwinUNETR):
     def __init__(self, in_channels, out_channels, img_size, feature_size=48, hidden_size=768, patch_size=16,
-                 conf_gating=True, voxel_prior=True, output_fusion=True, use_checkpoint=False, **swin_kw):
+                 conf_gating=True, voxel_prior=True, output_fusion=True, use_checkpoint=False, hu_input=False, **swin_kw):
         n_prob, n_dist = out_channels, out_channels - 1
+        if hu_input and not voxel_prior:
+            raise ValueError("hu_input needs voxel_prior (the likelihood maps travel with the prior channels)")
         self.voxel_prior = voxel_prior
-        super().__init__(in_channels=in_channels + (n_prob + n_dist + 1 if voxel_prior else 0), out_channels=out_channels,
-                         feature_size=feature_size, use_checkpoint=use_checkpoint, **swin_kw)
-        self.conf_gating, self.output_fusion = conf_gating, output_fusion
+        super().__init__(in_channels=in_channels + (n_prob + n_dist + 1 if voxel_prior else 0) + (n_dist if hu_input else 0),
+                         out_channels=out_channels, feature_size=feature_size, use_checkpoint=use_checkpoint, **swin_kw)
+        self.conf_gating, self.output_fusion, self.hu_input = conf_gating, output_fusion, hu_input
+        if hu_input and output_fusion:
+            self.hu_fusion_weight = nn.Parameter(torch.zeros(n_dist))  # beta_c on the HU log-likelihood; 0 = unchanged model
         if conf_gating:
             self.prior_tokens = PriorTokens((patch_size,) * 3, n_prob + n_dist + 1, hidden_size)
             dims = {i: feature_size * 2 ** i for i in range(5)}
@@ -90,6 +124,11 @@ class AtlasAwareSwinUNETR(SwinUNETR):
             self._check_input_size(x_in.shape[2:])
         tokens = self.prior_tokens(probability_maps, distance_maps, confidence_maps) if self.conf_gating else None
         x = torch.cat([x_in, probability_maps, distance_maps, confidence_maps], 1) if self.voxel_prior else x_in
+        if self.hu_input:
+            from training.physics_losses import hu_likelihood_maps
+            hu_ll, hu_valid = hu_likelihood_maps(x_in, probability_maps, confidence_maps)
+            hu_valid = hu_valid.view(*hu_valid.shape, 1, 1, 1)
+            x = torch.cat([x, hu_valid * torch.exp(hu_ll)], 1)  # plausibility in (0, 1]; 0 where the organ has no core
         hs = self._swin_stages(x, tokens)
         enc0 = self.encoder1(x)
         enc1 = self.encoder2(hs[0])
@@ -104,10 +143,15 @@ class AtlasAwareSwinUNETR(SwinUNETR):
         if self.output_fusion:
             log_prior = torch.log(probability_maps.float() + LOG_PRIOR_EPS)
             logits = logits + self.output_fusion_weight.view(1, -1, 1, 1, 1) * confidence_maps.float() * log_prior
+            if self.hu_input:  # posterior ~ prior x intensity likelihood x network evidence; background gets no term
+                beta = torch.cat([torch.zeros_like(self.hu_fusion_weight[:1]), self.hu_fusion_weight]).view(1, -1, 1, 1, 1)
+                logits = logits + beta * F.pad(hu_valid * hu_ll, (0, 0, 0, 0, 0, 0, 1, 0))
         return logits
 
     def new_parameters(self):
         out = {}
+        if self.hu_input and self.output_fusion:
+            out["beta"] = self.hu_fusion_weight.detach()
         if self.conf_gating:
             out["cross_gates"] = torch.stack([m.gate.detach() for m in self.cross.values()])
         if self.output_fusion:

@@ -1,0 +1,127 @@
+{
+  "atlas_count": 30,
+  "num_organs": 12,
+  "selection_criteria": "AMOS only, the 30 most typical cases passing: all 12 organs, slice<=3mm, in-plane<=1.6mm, z-extent>=300mm, largest component>=90%, organ volumes 0.3-3x pool median, kidney ratio<=2. Includes the 10 atlases of atlas_selection_amos.json.",
+  "cases": [
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0204_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0204.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0206_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0206.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0207_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0207.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0218_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0218.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0223_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0223.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0235_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0235.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0242_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0242.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0244_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0244.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0247_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0247.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0249_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0249.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0255_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0255.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0264_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0264.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0274_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0274.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0276_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0276.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0278_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0278.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0282_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0282.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0283_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0283.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0289_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0289.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0290_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0290.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0296_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0296.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0297_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0297.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0301_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0301.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0307_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0307.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0310_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0310.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0317_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0317.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0332_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0332.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0344_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0344.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0348_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0348.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0350_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0350.nii.gz"
+    },
+    {
+      "image": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0353_0000.nii.gz",
+      "label": "C:\\Users\\Asus\\OneDrive\\Desktop\\Atlas Based Medical Segmentation\\Dataset061_AMOS\\amos_0353.nii.gz"
+    }
+  ]
+}

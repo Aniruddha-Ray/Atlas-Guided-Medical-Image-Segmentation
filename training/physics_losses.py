@@ -99,6 +99,24 @@ def hu_consistency_loss(logits: torch.Tensor, image: torch.Tensor, prob: torch.T
     return torch.stack(terms).mean(), len(terms)
 
 
+@torch.no_grad()
+def hu_likelihood_maps(image: torch.Tensor, prob: torch.Tensor, conf: torch.Tensor, delta: float = 2.0, floor: float = -6.0,
+                       core_p: float = 0.9, core_w: float = 0.8, min_voxels: int = 50, sigma_min: float = 10.0):
+    """
+    Per-scan organ intensity likelihood as a network input / fusion term (the same statistics as the HU loss).
+    image (B, 1, ...) scaled to [0, 1], prob (B, C, ...), conf (B, 1, ...).
+    Returns ll (B, C-1, ...) = -huber((HU - mu_c) / sigma_c) clamped to [floor, 0], and valid (B, C-1) bool; organs without a
+    confident core are invalid and must be treated as 'no information' by the caller. With uninformative priors
+    (prior dropout, no-prior validation) no organ has a core, so every organ is invalid.
+    """
+    hu = to_hu(image)
+    mu, sigma, valid = organ_hu_stats(hu, prob.float(), conf.float(), core_p, core_w, min_voxels, sigma_min)
+    z = (hu - mu[:, 1:].reshape(*mu[:, 1:].shape, *([1] * (hu.ndim - 2)))) / sigma[:, 1:].reshape(
+        *sigma[:, 1:].shape, *([1] * (hu.ndim - 2)))
+    ll = (-huber(z, delta)).clamp(min=floor)
+    return ll, valid[:, 1:]
+
+
 def _gaussian_kernel1d(sigma_vox: float, device) -> torch.Tensor:
     radius = max(1, int(math.ceil(2.5 * sigma_vox)))
     x = torch.arange(-radius, radius + 1, dtype=torch.float32, device=device)

@@ -225,3 +225,8 @@ cache/
 
 # experiment checkpoints (large; configs/metrics/logs next to them ARE tracked)
 experiments/**/*.pth
+
+# Derived registration caches and run logs (regenerable, large)
+cache_amos/
+cache_btcv/
+logs/

@@ -36,6 +36,7 @@ CHUNK = os.path.join("experiments", EXP, "chunk_150_50_e100_chunk.json")
 TUNE_LRS = [5e-5, 1e-4, 2e-4, 4e-4]
 TUNE_EPOCHS, TUNE_HOLDOUT, DEFAULT_LR = 25, 50, 2e-4
 HU_WEIGHT, EDGE_WEIGHT = 0.03, 50.0  # new_model_plan.md steps 8 and 9
+FT_EPOCHS, FT_LR, FT_RAMP = 25, 5e-5, 3  # physics fine-tune of the best Swin + prior weights
 SWIN_CANDIDATES = [(48, False), (48, True), (24, True)]
 LOG = os.path.join(REPO, "logs", "queue_ablation.log")
 
@@ -153,6 +154,19 @@ def main():
         lr_swin = DEFAULT_LR
     if sw is not None:
         run(f"{base}_swin_prior", sw + lr_args(lr_swin) + ["--gamma-init=1.0"], a.epochs)
+        best_ck = os.path.join("experiments", EXP, f"{base}_swin_prior", "checkpoint_best.pth")
+        if os.path.exists(os.path.join(REPO, best_ck)):
+            # fine-tune the best weights with HU-likelihood inputs + fusion (--hu-input) and the physics losses:
+            # lower LR, short ramp, 25 epochs; the new input channels and beta start at zero, so it starts at the best model
+            ft_args = lr_args(FT_LR) + [f"--init-from={best_ck.replace(os.sep, '/')}", "--hu-input",
+                                        f"--hu-weight={HU_WEIGHT:g}", f"--edge-weight={EDGE_WEIGHT:g}", f"--ramp-epochs={FT_RAMP}"]
+            name = f"{base}_swin_prior_huin_physics{FT_EPOCHS}"
+            if run(name, sw + ft_args, FT_EPOCHS) != 0 and not any(a == "--swin-checkpoint" for a in sw):
+                # the 12 extra input channels and the HU maps may not fit the 4 GB card without activation checkpointing
+                say("[ft] failed; retrying once with activation checkpointing")
+                run(name + "_ckpt", sw + ["--swin-checkpoint"] + ft_args, FT_EPOCHS)
+        else:
+            say(f"[ft] no {best_ck}; fine-tune skipped")
         run(f"{base}_swin_prior_physics", sw + lr_args(lr_swin) + ["--gamma-init=1.0", f"--hu-weight={HU_WEIGHT:g}",
                                                                    f"--edge-weight={EDGE_WEIGHT:g}"], a.epochs)
     if lr_vit != DEFAULT_LR:

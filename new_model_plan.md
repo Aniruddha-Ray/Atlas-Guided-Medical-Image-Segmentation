@@ -244,7 +244,7 @@ def train_one_epoch(..., consistency_weight=0.0, consistency_ramp_epochs=10, cur
 
 **Why:** Paper Experiments 3 and 4.
 
-**Status:** implemented and tested (11 unit tests; a 3-epoch mixed-precision smoke run had no NaNs or skipped steps). On 12 real training scans the HU loss ranks the true labels above the atlas vote on 10 of 12 scans; the edge loss detects shifted boundaries but cannot separate truth from the atlas vote (6 of 12), so it is expected to act mainly as a smoothness term. Cost: +56 % step time, +0.28 GiB peak memory. Suggested starting weights from loss magnitudes: `--hu-weight 0.03`, `--edge-weight 50`. **Not yet evaluated in a real training run.**
+**Status:** implemented and tested (11 unit tests; a 3-epoch mixed-precision smoke run had no NaNs or skipped steps). On 12 real training scans the HU loss ranks the true labels above the atlas vote on 10 of 12 scans; the edge loss detects shifted boundaries but cannot separate truth from the atlas vote (6 of 12), so it is expected to act mainly as a smoothness term. Cost: +56 % step time, +0.28 GiB peak memory. Suggested starting weights from loss magnitudes: `--hu-weight 0.03`, `--edge-weight 50`. **Not yet evaluated in a real training run.** Queued on 2026-10-30 as one combined run on Swin (`--hu-weight 0.03 --edge-weight 50` together, run name `chunk_150_50_e100_swin_prior_physics`, right after the Swin + prior run), so a gain cannot be credited to either loss alone; the separate steps 8 and 9 stay open. Every run so far, UNETR and Swin, had both weights at 0 (`config.json`: `hu_weight` 0.0, `edge_weight` 0.0).
 
 ---
 
@@ -283,7 +283,7 @@ Measured: the epoch-101 weights give 0.727 with ground-truth priors and 0.13 wit
 
 ## Experiment Flow
 
-All runs on the same train/val split, augmentation and 96³ grid. **No server: every run is on the laptop (RTX 3050, 4 GB)**; the chunk is 150 train / 50 val.
+All runs on the same train/val split, augmentation and 96³ grid. **Every run so far is on the laptop (RTX 3050, 4 GB)** with the 150 train / 50 val chunk. A server (2 x Tesla V100 32 GB, Ubuntu 18.04, driver 530) is being set up for the whole-data runs and the learning-rate tuning (see "Next runs and the server"). Status and results are in the next subsection; the 10 atlases of `atlas/atlas_selection.json` were checked to be absent from the 150/50 chunk (2026-10-30), while two atlases of the earlier selection (`amos_0004`, `img0006`, in `atlas_selection_v1.json`) are ordinary training cases.
 
 | Step | What | Flag(s) | Why | Validation gate |
 |---|---|---|---|---|
@@ -300,6 +300,45 @@ All runs on the same train/val split, augmentation and 96³ grid. **No server: e
 | 10 | Swin UNETR + prior | `--backbone swin` | Backbone ablation, cell B (see below) | Beats the UNETR + prior run by more than the seed spread? |
 | 11 | UNETR, image only | `--image-only` | Ablation cell C | Reference for the prior's effect on UNETR |
 | 12 | Swin UNETR, image only | `--backbone swin --image-only` | Ablation cell D | Reference for the prior's effect on Swin |
+
+### Status and results (2026-10-30)
+
+150 train / 50 validation cases, 100 epochs, seed 0, lr 2e-4 → 1e-5 (untuned), `--gamma-init 1.0`, AMP, effective batch 2. Dice is the mean over the 12 organs on the 50 validation cases; the atlas-only vote on the same cases is **0.4242**.
+
+| Step | Run | State | Best val Dice (epoch) |
+|---|---|---|---|
+| 0 / 11 | UNETR image only (`chunk_150_50_e100_vit_imageonly`) | done | 0.309 (99) |
+| 3 to 5 combined (every flag on, γ-init 1; steps 1, 2 and 6 not run separately) | UNETR + prior (`chunk_150_50_e100`) | done | 0.606 (88) |
+| 10 | Swin UNETR + prior (`chunk_150_50_e100_swin_prior`) | running, epoch 88 of 100 (paused and resumed twice from `checkpoint_last.pth`) | **0.694 (86)** |
+| 8 + 9 combined | Swin + prior + HU + edge (`…_swin_prior_physics`) | queued next | none yet |
+| 12 | Swin image only (`…_swin_imageonly`) | queued last | none yet |
+| 7 | prior-channel ablation (P, P+D, P+D+w) | not built or run | none |
+
+Per-organ validation Dice at each run's best epoch (organ order is the AMOS order from `registration_log.md`, not confirmed against the dataset documentation):
+
+| Organ | UNETR image only | UNETR + prior | Swin + prior | Swin − UNETR |
+|---|---|---|---|---|
+| 1 spleen | 0.709 | 0.760 | 0.841 | +0.081 |
+| 2 right kidney | 0.626 | 0.812 | 0.863 | +0.051 |
+| 3 left kidney | 0.651 | 0.776 | 0.823 | +0.047 |
+| 4 gallbladder | 0.000 | 0.354 | 0.574 | +0.220 |
+| 5 esophagus | 0.000 | 0.509 | 0.575 | +0.066 |
+| 6 liver | 0.856 | 0.867 | 0.914 | +0.047 |
+| 7 stomach | 0.521 | 0.552 | 0.691 | +0.139 |
+| 8 aorta | 0.000 | 0.685 | 0.799 | +0.114 |
+| 9 IVC | 0.000 | 0.663 | 0.728 | +0.065 |
+| 10 pancreas | 0.342 | 0.526 | 0.600 | +0.074 |
+| 11 right adrenal | 0.000 | 0.421 | 0.492 | +0.071 |
+| 12 left adrenal | 0.000 | 0.346 | 0.428 | +0.082 |
+| **mean** | **0.309** | **0.606** | **0.694** | **+0.088** |
+
+What the numbers say, and what they do not:
+
+- **The prior is worth about +0.30 Dice for UNETR** (0.309 → 0.606) and turns six organs from 0 into 0.35 to 0.69. The UNETR + prior run beats the atlas vote on all 12 organs (0.606 against 0.424).
+- **Swin beats UNETR on every organ, by +0.088 on the mean** (largest on the gallbladder, stomach and aorta). Read it with the caveats: one seed, 50 cases, an untuned learning rate, different parameter counts (Swin 67.1 M, UNETR 122.4 M), and the best epoch is chosen on the same 50 cases, so every number is slightly optimistic. The Swin run is not finished.
+- **No-prior Dice** (the model scored with the atlas removed at test time, logged every 5th epoch; it measures the image pathway trained under prior dropout): Swin rose steadily from 0.28 (epoch 25) through 0.39 (40) and 0.50 (60) to 0.578 (85), against 0.694 with the prior. UNETR ended at 0.302. This is not the same quantity as the image-only run, which is trained without any prior; the Swin image-only run will separate the backbone effect from the effect of prior-dropout training.
+- **Ensemble check (CPU, 2026-10-30):** averaging softmax outputs of Swin (epoch 67) and UNETR (epoch 88) gave no gain on the 50 cases (0.6843 for Swin alone and for the 0.9/0.1 mix, 0.6833 at 0.7, 0.670 at 0.5, 0.606 for UNETR alone); the two models agree on 98.5 % of voxels. Both are anchored to the same atlas vote, so their errors are nearly identical, and the ensemble is not worth a second forward pass. A different kind of second model (another seed, or the HU + edge run) might add more. Script `scripts/ensemble_eval.py`, table in `experiments/exp_04_pipeline/ensemble_check_swin_e67_unetr_e88.md`.
+- **Tools:** `scripts/show_organ_dice.py <run>` prints the per-organ table with names (read-only, safe on a live run); the raw columns `o1` to `o12` in `metrics.csv` are not renamed because `run.py`'s report stage, the queue and the watcher read them by those names.
 
 ### Prior-channel ablation (step 7): P vs P+D vs P+D+w
 
@@ -319,7 +358,7 @@ All runs on the same train/val split, augmentation and 96³ grid. **No server: e
 
 ## Backbone ablation: UNETR vs Swin UNETR (steps 10 to 12)
 
-**Status (2026-10-28).** The UNETR + prior cell is the 150/50, 100-epoch run in progress (`chunk_150_50_e100`). The other three cells are queued behind it by `scripts/queue_ablation.py` and start automatically.
+**Status (2026-10-30).** Cells A (UNETR + prior, 0.606) and C (UNETR image only, 0.309) are done. Cell B (Swin + prior) is at epoch 88 of 100 with best 0.694. Cell D (Swin image only) runs last. `scripts/queue_ablation.py` (laptop, Swin pinned with `--swin-config=48,0`) now runs: Swin + prior → Swin + prior + HU + edge → Swin image only; the UNETR image-only run is skipped as finished. Results and per-organ numbers are in "Status and results" above.
 
 **Motivation.** The anatomical tokens and the voxel path already give the network global anatomy, so global attention between, say, aorta and liver voxels is not what the backbone has to supply. Organ boundaries and texture are local. Two further reasons to expect Swin to help: the UNETR token grid is only 6x6x6 (16^3 patches), which is coarse for the weakest organs (organs 4, 11, 12), and a hierarchy with local windows is a stronger inductive bias for a from-scratch model on 150 cases. Swin is not cheaper: UNETR attends over 216 tokens, Swin over 110 k at its first level. Its last stage is effectively global (3^3 tokens), so locality is a bias, not a restriction. This is a hypothesis; the runs below test it.
 
@@ -331,6 +370,7 @@ All runs on the same train/val split, augmentation and 96³ grid. **No server: e
 | B | Swin UNETR | P, D, w | `chunk_150_50_e100_swin_prior` | 10 |
 | C | UNETR | none (`--image-only`) | `chunk_150_50_e100_vit_imageonly` | 11 |
 | D | Swin UNETR | none (`--image-only`) | `chunk_150_50_e100_swin_imageonly` | 12 |
+| (extra) | Swin UNETR | P, D, w + HU + edge losses (`--hu-weight 0.03 --edge-weight 50`) | `chunk_150_50_e100_swin_prior_physics` | 8 and 9 combined, outside the 2 x 2 grid; compare with cell B |
 
 "Image only" feeds uninformative priors (P = 1/13, D = 1, w = 0) in training and validation, so it is the same network with the atlas switched off. Readings: B versus A is the backbone effect with the prior; D versus C is the backbone effect without it; (A - C) versus (B - D) shows whether the prior helps the two backbones equally. All are read against the atlas-only vote on the same 50 cases (0.424).
 
@@ -355,11 +395,23 @@ All runs on the same train/val split, augmentation and 96³ grid. **No server: e
 
 Stage 1 (24^3 tokens) has no cross-attention (13.8 k queries are costly on a 4 GB card, and the voxel path covers that resolution). Differences that remain between the cells: Swin has a different parameter count, and its voxel prior also enters the patch embedding. The comparison is "each backbone with its best-effort version of the same prior integration", not an identical parameter budget.
 
-**Memory and speed.** The laptop GPU has 4 GB. Before the first Swin run the queue benchmarks, in order, feature size 48, feature size 48 with activation checkpointing, and feature size 24 with checkpointing, and takes the first that fits. The chosen configuration and the measured seconds per epoch are in `logs/queue_ablation.log`. If Swin fits in none, the Swin cells are skipped and logged. Swin epoch time is unmeasured; a UNETR epoch is about 250 s, so the three runs together are at least 21 h if Swin is as fast as UNETR and probably more.
+**Memory and speed (measured).** The laptop GPU has 4 GB. The benchmark picked Swin feature size 48 without checkpointing, which peaks at 5.26 GiB: it exceeds the 4 GiB card and spills into shared memory, but it trains. The queue now pins that configuration (`--swin-config=48,0`) so a resumed run builds exactly the same model; feature size 48 with checkpointing and feature size 24 were never benchmarked. Swin epochs take about 1,200 s (median 1,232 s, up to about 1,480 s when the laptop is busy), against about 295 s for UNETR, so a 100-epoch Swin run is about 33 h and a UNETR run about 8 h. The Swin + prior run was interrupted once (laptop sleep) and paused and resumed twice on request; it resumes from `checkpoint_last.pth` with no loss beyond the unfinished epoch. HU + edge cost +56 % step time and +0.28 GiB on UNETR at 96³ (unit-test smoke run); the Swin cost is unmeasured and the run may exceed memory on the 4 GB card, in which case the queue logs the failure and moves on.
 
-**Caveats.** One seed and 50 validation cases: a gap below about 0.01 is not a result (the seed spread has not been measured; step 7 plans to measure it). The image-only UNETR collapsed at 48 cases (0.06), so cell C may be a weak reference rather than a fair "image-only" ceiling; if Swin learns image-only where UNETR does not, that is itself a finding about inductive bias.
+**Caveats.** One seed and 50 validation cases: a gap below about 0.01 is not a result (the seed spread has not been measured; step 7 plans to measure it). The image-only UNETR scored 0.309 at 150/50 with six organs (gallbladder, esophagus, aorta, IVC, both adrenals) stuck at exactly 0 (0.06 at 48 cases), so cell C is a weak reference rather than a fair "image-only" ceiling; if Swin learns image-only where UNETR does not, that is itself a finding about inductive bias. The Swin prior run's no-prior Dice (0.578 against UNETR's 0.302) already hints at it, but that number comes from a model trained with the prior and prior dropout, so only cell D answers the question.
 
 **Decision rule.** Adopt Swin as the main backbone only if B beats A by more than the seed spread and the gain shows on the small organs (4, 5, 11, 12) and not just on large ones, at an epoch time the laptop can afford.
+
+## Next runs and the server (2026-10-30)
+
+**Laptop queue (running, in this order):** Swin + prior (finishing) → Swin + prior + HU + edge (about 33 h or more, memory unmeasured) → Swin image only (about 33 h). Swin + prior should end the evening of 2026-10-30; the whole queue about 2026-11-03. The queue can be paused and resumed on request: stop the queue process first (otherwise it restarts the run by itself), then the trainer right after a checkpoint, and restart `python scripts/queue_ablation.py --swin-config=48,0` to resume.
+
+**Whole-data runs and tuning on the server.** `run.py` runs the pipeline for UNETR; `run_swin.py` is its Swin counterpart with the recipe of the laptop Swin run (feature size 48, γ-init 1.0, lr 2e-4 → 1e-5, KL 0.1, prior dropout 0.3) and its own default run name (`swin_full_e<epochs>`), so the two never collide. Both take the same flags (`--mode full --epochs 200 --reg-shards N`). `run.py` alone starts at γ = 0, the setting that collapsed to 0.31 at 48 cases, so a UNETR run needs `--train-args=--gamma-init=1.0`. Planned there: UNETR and Swin + prior on the whole data for 200 epochs (one job per GPU), then the per-backbone learning-rate tuning (`queue_ablation.py --tune`, written for the 150/50 chunk and needing a small change for the whole data), then the unrun steps 7 to 9 and a second seed to measure the seed spread.
+
+**Server facts (from the machine):** 2 x Tesla V100-PCIE-32GB (compute capability 7.0), NVIDIA driver 530.30.02 (CUDA 12.1), Ubuntu 18.04 (glibc 2.27), 40 cores, 187 GB RAM, home directory on shared NFS. Consequences: the laptop's `+cu130` torch pins cannot be used; the chosen environment is a user-space Miniforge, Python 3.11, torch 2.5.1 / torchvision 0.20.1 / torchaudio 2.5.1 with `cu121`, and the other packages pinned to the laptop versions (MONAI 1.6.0, numpy 2.3.5, scipy 1.16.2, nibabel 5.4.2, SimpleITK 2.5.6, pandas 3.0.3, …). All of this is staged in `server/setup_server.sh` (stages: `preflight`, `miniforge`, `env`, `torch`, `gpu`, `repo`, `data`, `deps-check`, `deps`, `tests`, `plan`, `bench`); it has been syntax-checked on the laptop but **not run on the server**. Open questions: whether every pinned package has a wheel for glibc 2.27 (`deps-check` answers it; the fallback is conda-forge), whether the server has a writable local disk for the dataset and cache, and how fast the V100s are (the `bench` stage measures it).
+
+**Comparability.** Server results run on a different torch build (2.5.1 against 2.14.0 here), so small numerical differences are expected. Keep the seed, chunk file and atlas selection fixed, compare trends rather than the last digit, and re-run one laptop cell on the server if an exact comparison is needed. A larger server batch would change the optimisation (laptop: micro-batch 1 x accumulation 2), so change it only together with the learning-rate tuning.
+
+**Still open:** the Swin result at epoch 100 and the three-way comparison with cells A, C, D; the HU + edge effect on Swin; step 7 (D and w ablation) and the seed spread; learning-rate tuning; `RUN_GUIDE.md`, `research_audit.md` and `registration_log.md` do not yet describe `run.py`, the Swin model or these results.
 
 ## Implementation Plan
 
@@ -389,7 +441,7 @@ Stage 1 (24^3 tokens) has no cross-attention (13.8 k queries are costly on a 4 G
 ## Success metrics
 
 - Step 0: Establishes image-alone baseline.
-- Step 3: Model output ≥ atlas-only Dice on validation (currently 0.13 << 0.44).
+- Step 3: Model output ≥ atlas-only Dice on validation (was 0.13 << 0.44 for the epoch-101 model; **met on 2026-10-28/30**: UNETR + prior 0.606 and Swin + prior 0.694 against the atlas vote 0.424 on the 50 validation cases, with γ-init 1.0).
 - Step 4: Small organs improve per-organ Dice.
 - Step 5: Consistency loss adds ≥ 1–2% Dice.
 - Step 6 (diagnostic, read in both directions): if shifting the priors by 5 to 20 mm lowers Dice clearly, the model uses registration detail and further registration tuning is worth its cost; if Dice barely moves, registration precision is not the bottleneck and effort belongs in the architecture (steps 2 to 5) instead.
@@ -402,4 +454,4 @@ Stage 1 (24^3 tokens) has no cross-attention (13.8 k queries are costly on a 4 G
 - `experiments/registration_log.md`: prior quality numbers.
 - `prototype.ipynb`: smoke test baseline numbers.
 - Paper: Experiments 1–4 correspond to steps 1–5 above.
-- Note: this plan is ~400 lines; an earlier chat message that said 970 lines was wrong.
+- Note: this plan is ~460 lines; an earlier chat message that said 970 lines was wrong.

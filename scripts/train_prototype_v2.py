@@ -16,6 +16,13 @@ is mathematically the same as a batch of N.
 The deterministic part of the data pipeline (load, 1 mm resample, resize, atlas-stack resampling) is cached on disk
 once per case. Label and atlas stack are stored as uint8 (they are integer labels), ~13 MB per case instead of ~60 MB;
 they are cast back to float32 before augmentation, so the samples are bit-identical to the uncached pipeline.
+
+Patch mode (--patch-size 96): instead of resizing each whole volume to 96^3 (3-5 mm voxels), volumes keep --spacing mm
+(default 1.5) and training uses class-balanced 96^3 patches, --patches-per-case per case and epoch; validation runs on the
+whole volumes by sliding window (training/patch_eval.py). Its Dice is on the --spacing grid, so it is not comparable with
+the 96^3-resize numbers. The cache (~0.1-0.2 GB per case) goes to <cache-dir>/persistent_patch_s<spacing>_u8.
+
+    python scripts/train_prototype_v2.py --backbone swin --patch-size 96 --spacing 1.5 --run-name swin_patch --epochs 100 --amp
 """
 from __future__ import annotations
 
@@ -43,7 +50,8 @@ from monai.utils import set_determinism
 
 from data.splits import (DEFAULT_CACHE_DIR, DEFAULT_DATA_DIR, attach_atlas_priors, case_name, paired_cases,
                          split_with_atlases_removed)
-from data.transforms import build_transforms
+from data.transforms import build_patch_transforms, build_transforms
+from training.patch_eval import atlas_vote_volumes, validate_volumes
 from training.physics_losses import edge_aware_loss, hu_consistency_loss, spacing_from_affine
 
 IMG_SIZE = (96, 96, 96)
@@ -142,7 +150,17 @@ def main():
                    help="initial output-fusion weight (all classes): 1.0 starts the network at logits = z + w*log(P), i.e. at the atlas vote")
     p.add_argument("--backbone", choices=("vit", "swin"), default="vit", help="vit = UNETR (default), swin = Swin UNETR (models/swin_atlas.py)")
     p.add_argument("--swin-feature-size", type=int, default=48, help="Swin UNETR feature size (multiple of 12; 48 is the published size)")
+    p.add_argument("--hu-input", action="store_true",
+                   help="Swin only: per-scan organ HU-likelihood maps (from the atlas core) as 12 extra input channels, plus a "
+                        "learnable per-organ weight on the log-likelihood in the output fusion (init 0)")
     p.add_argument("--swin-checkpoint", action="store_true", help="activation checkpointing in the Swin stages (less memory, slower)")
+    p.add_argument("--patch-size", type=int, default=None,
+                   help="patch mode: train on PxPxP patches of volumes kept at --spacing mm, validate by sliding window "
+                        "(default: off, every volume resized to 96^3 as before)")
+    p.add_argument("--spacing", type=float, default=1.5, help="patch mode: isotropic voxel size in mm")
+    p.add_argument("--patches-per-case", type=int, default=4, help="patch mode: patches drawn from each training case per epoch")
+    p.add_argument("--sw-overlap", type=float, default=0.25, help="patch mode: sliding-window overlap at validation")
+    p.add_argument("--val-every", type=int, default=1, help="validate every N epochs (and at the last epoch)")
     p.add_argument("--amp", action="store_true")
     p.add_argument("--num-workers", type=int, default=2)
     p.add_argument("--seed", type=int, default=42)
@@ -154,6 +172,8 @@ def main():
                         "leave the real validation split untouched, so it is never used to choose settings")
     p.add_argument("--bench", action="store_true", help="time the data pipeline, a few steps and validation; then exit")
     p.add_argument("--resume", default=None, help="checkpoint_last.pth of a previous run of this script")
+    p.add_argument("--init-from", default=None, help="checkpoint of a previous run: start a NEW run from its model weights only "
+                                                     "(fresh optimizer, schedule and best-epoch tracking)")
     args = p.parse_args()
 
     if args.full_data:
@@ -197,30 +217,67 @@ def main():
     PriorDropoutd, atlas_consistency_loss = ns["PriorDropoutd"], ns["atlas_consistency_loss"]
     consistency_lambda, v2_validate = ns["consistency_lambda"], ns["v2_validate"]
 
+    def validate(m, loader):
+        if patch:
+            return validate_volumes(m, loader, device, patch, amp=amp, overlap=args.sw_overlap)
+        return v2_validate(m, loader, device, amp=amp)
+
     rot = tuple(float(x) for x in np.deg2rad([-args.rotate_range_deg, args.rotate_range_deg]))
-    kw = dict(prior_source="atlas", rotate_range=rot)
-    persist = args.persist_dir or os.path.join(args.cache_dir, "persistent_v2_u8")
-    train_ds = PersistentDataset(train_cases, compact_cached(build_transforms(IMG_SIZE, NUM_CLASSES, train=True, **kw)),
-                                 cache_dir=persist, track_meta=True, weights_only=False)
-    val_ds = PersistentDataset(val_cases, compact_cached(build_transforms(IMG_SIZE, NUM_CLASSES, train=False, **kw)),
-                               cache_dir=persist, track_meta=True, weights_only=False)
     workers = args.num_workers
+    patch = (args.patch_size,) * 3 if args.patch_size else None
+    if patch:
+        if args.patch_size % 32:
+            raise SystemExit("--patch-size must be a multiple of 32 (five 2x downsamplings)")
+        if args.backbone == "vit" and patch != IMG_SIZE:
+            raise SystemExit(f"the ViT backbone is built for {IMG_SIZE[0]}^3 inputs; use --patch-size {IMG_SIZE[0]}")
+        pkw = dict(spacing=(args.spacing,) * 3, num_classes=NUM_CLASSES)
+        persist = args.persist_dir or os.path.join(args.cache_dir, f"persistent_patch_s{args.spacing:g}_u8")
+        # the case list repeated: each copy is one patch per epoch (same cache file, a new random crop)
+        train_ds = PersistentDataset(train_cases * args.patches_per_case,
+                                     build_patch_transforms(patch, train=True, rotate_range=rot, **pkw),
+                                     cache_dir=persist, track_meta=True, weights_only=False)
+        val_ds = PersistentDataset(val_cases, build_patch_transforms(patch, train=False, **pkw),
+                                   cache_dir=persist, track_meta=True, weights_only=False)
+        val_workers = min(workers, 1)  # a whole 1.5 mm volume with its priors is ~1-2 GB in RAM
+        val_loader = DataLoader(val_ds, batch_size=1, shuffle=False, num_workers=val_workers,
+                                persistent_workers=val_workers > 0, **({"prefetch_factor": 1} if val_workers else {}))
+    else:
+        kw = dict(prior_source="atlas", rotate_range=rot)
+        persist = args.persist_dir or os.path.join(args.cache_dir, "persistent_v2_u8")
+        train_ds = PersistentDataset(train_cases, compact_cached(build_transforms(IMG_SIZE, NUM_CLASSES, train=True, **kw)),
+                                     cache_dir=persist, track_meta=True, weights_only=False)
+        val_ds = PersistentDataset(val_cases, compact_cached(build_transforms(IMG_SIZE, NUM_CLASSES, train=False, **kw)),
+                                   cache_dir=persist, track_meta=True, weights_only=False)
+        val_loader = DataLoader(val_ds, batch_size=1, shuffle=False, num_workers=workers, persistent_workers=workers > 0)
     train_loader = DataLoader(train_ds, batch_size=args.micro_batch, shuffle=True, num_workers=workers,
                               persistent_workers=workers > 0)
-    val_loader = DataLoader(val_ds, batch_size=1, shuffle=False, num_workers=workers, persistent_workers=workers > 0)
 
     if args.backbone == "swin":
         from models.swin_atlas import AtlasAwareSwinUNETR
         model = AtlasAwareSwinUNETR(MODEL_KW["in_channels"], MODEL_KW["out_channels"], IMG_SIZE,
                                     feature_size=args.swin_feature_size, hidden_size=MODEL_KW["hidden_size"],
                                     conf_gating=args.conf_gating, voxel_prior=args.voxel_prior,
-                                    output_fusion=args.output_fusion, use_checkpoint=args.swin_checkpoint).to(device)
+                                    output_fusion=args.output_fusion, use_checkpoint=args.swin_checkpoint,
+                                    hu_input=args.hu_input).to(device)
     else:
         model = AtlasAwareViTUNETR(**MODEL_KW, conf_gating=args.conf_gating, voxel_prior=args.voxel_prior,
                                    output_fusion=args.output_fusion).to(device)
     if args.gamma_init != 0.0 and args.output_fusion:
         with torch.no_grad():
             model.output_fusion_weight.fill_(args.gamma_init)
+    init_note = None
+    if args.init_from and not args.resume:
+        ck_init = torch.load(args.init_from, map_location=device, weights_only=False)
+        state = ck_init["model"] if "model" in ck_init else ck_init  # checkpoint_last.pth or checkpoint_best.pth (plain state dict)
+        if args.backbone == "swin":
+            from models.swin_atlas import load_state_dict_expanding
+            grown, absent = load_state_dict_expanding(model, state)
+            init_note = (f"initialised from {args.init_from}: {len(grown)} tensors gained zero-initialised input channels, "
+                         f"{len(absent)} tensors kept their fresh initialisation ({', '.join(absent) or 'none'})")
+        else:
+            model.load_state_dict(state)
+            init_note = f"initialised from {args.init_from}"
+        del ck_init, state
     n_params = sum(q.numel() for q in model.parameters())
     criterion = DiceCELoss(to_onehot_y=False, softmax=True)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
@@ -248,6 +305,8 @@ def main():
            "gpu": torch.cuda.get_device_name(0) if device.type == "cuda" else None, "torch": torch.__version__}
     json.dump(cfg, open(os.path.join(out_dir, "config.json"), "w", encoding="utf-8"), indent=2, default=str)
     log(f"Run {out_dir}")
+    if init_note:
+        log(init_note)
     log(f"{n_params / 1e6:.2f} M params | train {len(train_cases)} val {len(val_cases)} | micro-batch {args.micro_batch} x accum "
         f"{args.accum} = effective {args.micro_batch * args.accum} | {opt_steps_per_epoch} optimizer steps/epoch | amp {amp}")
 
@@ -290,10 +349,14 @@ def main():
 
     if args.bench:
         return bench(args, log, device, model, train_ds, val_loader, forward_loss, total_loss, scaler, optimizer, amp,
-                     v2_validate, train_loader)
+                     validate, train_loader)
 
-    ref = atlas_vote_dice(val_loader)
-    log(f"reference: atlas-only majority vote on the validation chunk (96^3 grid): Dice {ref:.4f}")
+    if patch:
+        ref = atlas_vote_volumes(val_loader, NUM_CLASSES)
+        grid = f"whole volumes at {args.spacing:g} mm"
+    else:
+        ref, grid = atlas_vote_dice(val_loader), "96^3 grid"
+    log(f"reference: atlas-only majority vote on the validation chunk ({grid}): Dice {ref:.4f}")
 
     csv_path = os.path.join(out_dir, "metrics.csv")
     new_file = not os.path.exists(csv_path)
@@ -337,16 +400,19 @@ def main():
                 skipped += int(scaler.get_scale() < before)
                 optimizer.zero_grad(set_to_none=True)
                 sched.step()
-        val, per = v2_validate(model, without_prior(val_loader) if args.image_only else val_loader, device, amp=amp)
-        val_np = None
-        if epoch % 5 == 0 or epoch == args.epochs:
-            val_np, _ = v2_validate(model, without_prior(val_loader), device, amp=amp)
+        do_val = epoch % args.val_every == 0 or epoch == args.epochs
+        val, per, val_np = None, [None] * len(ORGAN_IDS), None
+        if do_val:
+            val, per = validate(model, without_prior(val_loader) if args.image_only else val_loader)
+        if do_val and (epoch % 5 == 0 or epoch == args.epochs):
+            val_np, _ = validate(model, without_prior(val_loader))
         newp = model.new_parameters()
         gate = float(newp["cross_gates"].mean()) if "cross_gates" in newp else float("nan")
         gamma = float(newp["gamma"][1:].mean()) if "gamma" in newp else float("nan")
         secs = time.time() - t0
         with open(csv_path, "a", newline="", encoding="utf-8") as f:
-            csv.writer(f).writerow([epoch, optimizer.param_groups[0]["lr"], lam, sup_sum / n_micro, kl_sum / n_micro, val,
+            csv.writer(f).writerow([epoch, optimizer.param_groups[0]["lr"], lam, sup_sum / n_micro, kl_sum / n_micro,
+                                    "" if val is None else val,
                                     val_np if val_np is not None else "", gate, gamma]
                                    + [("" if s is None else round(s, 4)) for s in per] + [round(secs, 1), skipped]
                                    + [hu_sum / n_micro, edge_sum / n_micro, hu_organs / max(n_micro * args.micro_batch, 1)])
@@ -358,9 +424,9 @@ def main():
         steady = epoch_times[1:] or epoch_times  # epoch 1 also builds the sample cache
         eta_h = (args.epochs - epoch) * float(np.mean(steady[-5:])) / 3600
         log(f"epoch {epoch:3d}/{args.epochs}  loss {sup_sum / n_micro:.4f} (+{lam:.3f} x KL {kl_sum / n_micro:.3f})  "
-            f"val Dice {val:.4f}{extra}  gate {gate:.3f} gamma {gamma:+.3f}  lr {optimizer.param_groups[0]['lr']:.2e}  "
+            f"val Dice {'-' if val is None else f'{val:.4f}'}{extra}  gate {gate:.3f} gamma {gamma:+.3f}  lr {optimizer.param_groups[0]['lr']:.2e}  "
             f"{secs:.0f}s  ETA {eta_h:.1f} h{'  skipped ' + str(skipped) if skipped else ''}")
-        if val > best["val_dice"]:
+        if val is not None and val > best["val_dice"]:
             best = {"epoch": epoch, "val_dice": val, "per_organ": per}
             torch.save(model.state_dict(), os.path.join(out_dir, "checkpoint_best.pth"))
             log("   new best")
@@ -374,7 +440,7 @@ def main():
         f"(atlas-only reference {ref:.4f})")
 
 
-def bench(args, log, device, model, train_ds, val_loader, forward_loss, total_loss, scaler, optimizer, amp, v2_validate,
+def bench(args, log, device, model, train_ds, val_loader, forward_loss, total_loss, scaler, optimizer, amp, validate,
           train_loader):
     n = len(train_ds)
     log(f"--- bench: {n} cached train cases, {len(val_loader)} cached val cases ---")
@@ -405,7 +471,7 @@ def bench(args, log, device, model, train_ds, val_loader, forward_loss, total_lo
         f"(first {times[0]:.1f} s), peak GPU {peak:.2f} GiB")
     for _ in val_loader:  # builds the validation cache
         pass
-    t0 = time.time(); v2_validate(model, val_loader, device, amp=amp); torch.cuda.synchronize()
+    t0 = time.time(); validate(model, val_loader); torch.cuda.synchronize()
     val_s = (time.time() - t0) / max(len(val_loader), 1)
     log(f"validation (fetch + forward): {val_s:.2f} s/case")
     res = {"first_pass_s_per_case": first_s, "data_s_per_sample_main_process": data_s, "step_s_per_micro_batch": step_s,
